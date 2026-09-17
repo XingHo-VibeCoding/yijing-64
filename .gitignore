@@ -1,0 +1,47 @@
+# ============================================
+# 易经六十四卦 · 忽略规则
+# 作用：这里列出的文件「永远不会」被上传到 GitHub
+# 改完这个文件请立刻用 git status --ignored 复核
+# ============================================
+
+# --- 第一优先级：本机私密内容，绝对不能公开 ---
+
+# 会话记忆 / 工作日志目录（内含本机路径、仓库信息等）
+.workbuddy/
+
+# 上一个练习的独立 Git 仓库，不属于本项目
+Claw/
+
+# 本地配置文件（存数据库密码、API Key 等）
+.env
+.env.*
+!.env.example
+
+# 各类密钥与证书
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials*
+
+# --- 依赖目录（体积大，且能从配置文件还原）---
+node_modules/
+vendor/
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# --- 构建产物 / 缓存 / 日志 ---
+dist/
+build/
+.cache/
+*.log
+
+# --- 编辑器与操作系统文件 ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
