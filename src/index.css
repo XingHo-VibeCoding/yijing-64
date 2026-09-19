@@ -116,3 +116,25 @@ body {
   margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
   font-size: 12.5px; color: #8c959f;
 }
+
+/* ---------- 起卦入口（F7）：全页视觉权重最高的动作 ---------- */
+.cast-cta {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 100%; max-width: 330px; margin: 24px auto 6px;
+  padding: 17px 24px 15px;
+  font: inherit; cursor: pointer;
+  color: #f5f2ec;
+  background: radial-gradient(circle at 50% 28%, #2e2723 0%, #1b1714 72%);
+  border: 1px solid #120f0d;
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(27,23,20,.18);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.cast-cta:hover { transform: translateY(-2px); box-shadow: 0 11px 26px rgba(27,23,20,.26); }
+.cast-cta:active { transform: translateY(0); }
+.cast-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cast-cta-main {
+  font-size: 19px; font-weight: 600;
+  letter-spacing: .3em; text-indent: .3em;   /* 让「起 一 卦」视觉居中 */
+}
+.cast-cta-sub { font-size: 12px; letter-spacing: .14em; opacity: .68; }

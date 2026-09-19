@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import data from '../data/64卦.json'
 import HexagramFigure from './HexagramFigure.jsx'
+import CastingAnimation from './CastingAnimation.jsx'
 
 const VOLUMES = [
   { key: '上经', range: '1–30' },
@@ -17,9 +18,35 @@ function SourceTag({ kind, note }) {
   )
 }
 
+/** 一键起卦：六爻各自随机（阳 / 阴各半），再按六爻查卦；变爻按传统概率取（每爻 1/4） */
+function castOnce() {
+  const lines = Array.from({ length: 6 }, () => (Math.random() < 0.5 ? 1 : 0))
+  const hit = data.items.find((h) => h.lines.join('') === lines.join('')) || data.items[0]
+  const changing = []
+  lines.forEach((_, i) => {
+    if (Math.random() < 0.25) changing.push(i + 1)
+  })
+  return { id: hit.id, changing }
+}
+
 export default function App() {
   const [currentId, setCurrentId] = useState(null)
+  const [casting, setCasting] = useState(null)
   const current = currentId === null ? null : data.items.find((h) => h.id === currentId)
+
+  if (casting) {
+    const target = data.items.find((h) => h.id === casting.id)
+    return (
+      <CastingAnimation
+        result={target}
+        changingLines={casting.changing}
+        onFinish={() => {
+          setCasting(null)
+          setCurrentId(target.id)
+        }}
+      />
+    )
+  }
 
   if (current) {
     return (
@@ -76,6 +103,13 @@ export default function App() {
       <header className="head">
         <h1>易经六十四卦学习</h1>
         <p className="sub">认识卦象 · 读懂原文 · 记住卦序</p>
+
+        {/* 全页视觉权重最高的动作（PRD F7） */}
+        <button type="button" className="cast-cta" onClick={() => setCasting(castOnce())}>
+          <span className="cast-cta-main">起 一 卦</span>
+          <span className="cast-cta-sub">成事在人，莫问前程</span>
+        </button>
+
         <p className="boundary">本页不提供占卜、预测与运势判断</p>
       </header>
 

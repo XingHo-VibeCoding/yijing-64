@@ -1,0 +1,107 @@
+/* ============================================================
+   起卦动画（F7）
+   层级：背景墨(z1) → 图案(z2) → 覆盖墨(z3) → 按钮(z4)
+   ============================================================ */
+
+.cast-root {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow: hidden;
+  /* 白色宣纸：中心略亮，四周微微泛黄 */
+  background:
+    radial-gradient(circle at 50% 44%, #fdfbf6 0%, #f4f0e8 52%, #e9e3d8 100%);
+}
+
+/* 宣纸的纤维质感（极淡的斜向纹） */
+.cast-root::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    repeating-linear-gradient(102deg, rgba(120,105,85,.05) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(14deg, rgba(120,105,85,.04) 0 1px, transparent 1px 11px);
+}
+
+.cast-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cast-bg    { z-index: 1; }
+.cast-cover { z-index: 3; }
+
+.cast-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(84vmin, 620px);
+  height: min(84vmin, 620px);
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* 外侧虚圆：运不只是表面预测 */
+.cast-dashed {
+  fill: none;
+  stroke: #1b1714;
+  stroke-width: 0.9;
+  stroke-dasharray: 2.6 5.2;
+  opacity: 0.42;
+}
+.cast-dashed-thin {
+  stroke-width: 0.6;
+  stroke-dasharray: 1.5 6.5;
+  opacity: 0.24;
+}
+
+.cast-hex {
+  transform-box: view-box;
+  transform-origin: center;
+}
+
+.cast-figure { pointer-events: none; }
+
+/* ---------- 按钮 ---------- */
+.cast-skip,
+.cast-focus-btn {
+  position: absolute;
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
+  padding: 10px 26px;
+  border-radius: 999px;
+  font-size: 15px;
+  letter-spacing: .06em;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .25s ease, color .25s ease, border-color .25s ease;
+}
+
+/* 主按钮：查看解读 */
+.cast-skip {
+  bottom: max(9vh, 56px);
+  border: 1px solid #1b1714;
+  background: #1b1714;
+  color: #f5f2ec;
+}
+.cast-skip:hover { background: #332c26; border-color: #332c26; }
+
+/* 次按钮：看这一爻 */
+.cast-focus-btn {
+  bottom: calc(max(9vh, 56px) + 56px);
+  border: 1px solid rgba(27,23,20,.45);
+  background: rgba(253,251,246,.72);
+  color: #1b1714;
+  backdrop-filter: blur(2px);
+}
+.cast-focus-btn:hover { background: rgba(253,251,246,.95); border-color: #1b1714; }
+
+@media (max-width: 520px) {
+  .cast-skip, .cast-focus-btn { font-size: 14px; padding: 9px 20px; }
+}
