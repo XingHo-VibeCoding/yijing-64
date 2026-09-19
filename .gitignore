@@ -12,6 +12,11 @@
 # 上一个练习的独立 Git 仓库，不属于本项目
 Claw/
 
+# 沙箱删除失败留下的临时文件（无法删除，只能忽略；可手动删掉）
+data/__tmp.json
+data/__writetest.json
+data/__*.json
+
 # 本地配置文件（存数据库密码、API Key 等）
 .env
 .env.*

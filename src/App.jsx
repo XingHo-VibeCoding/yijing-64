@@ -1,10 +1,21 @@
 import { useState } from 'react'
 import data from '../data/64卦.json'
+import HexagramFigure from './HexagramFigure.jsx'
 
 const VOLUMES = [
   { key: '上经', range: '1–30' },
   { key: '下经', range: '31–64' },
 ]
+
+/** 来源标注：区分「经典原文」与「后人解读」（PRD 第 6 节 F5） */
+function SourceTag({ kind, note }) {
+  return (
+    <p className={`src src-${kind}`}>
+      <span className="src-kind">{kind === 'text' ? '《周易》原文' : '现代白话解读'}</span>
+      <span className="src-note">{note}</span>
+    </p>
+  )
+}
 
 export default function App() {
   const [currentId, setCurrentId] = useState(null)
@@ -25,12 +36,30 @@ export default function App() {
           </div>
         </header>
 
+        <section className="block">
+          <h2 className="block-title">卦象</h2>
+          <div className="figure-wrap">
+            <HexagramFigure lines={current.lines} />
+            <dl className="trigrams">
+              <div>
+                <dt>上卦</dt>
+                <dd>{current.upperTrigram}（{current.upperNature}）</dd>
+              </div>
+              <div>
+                <dt>下卦</dt>
+                <dd>{current.lowerTrigram}（{current.lowerNature}）</dd>
+              </div>
+            </dl>
+          </div>
+          <SourceTag kind="text" note="卦象与卦序依据通行本（王弼本）；卦符取自 Unicode U+4DC0–U+4DFF" />
+        </section>
+
         <section className="pending">
           <h2 className="pending-title">待补内容</h2>
           <ul>
-            <li>卦象图（六爻爻线）</li>
-            <li>卦辞、象辞、六条爻辞（原文 + 白话）</li>
-            <li>上下卦（三画卦）与来源标注</li>
+            <li>卦辞、象辞（原文 + 白话）</li>
+            <li>六条爻辞（原文 + 白话 + 小象）</li>
+            <li>卦名拼音</li>
           </ul>
           <p className="pending-note">
             按 PRD 第 7.2 节，原文须以 ctext.org 王弼本逐条核对后录入，本步未做。
@@ -39,6 +68,8 @@ export default function App() {
       </main>
     )
   }
+
+  const withFigure = data.items.length
 
   return (
     <main className="page">
@@ -70,7 +101,7 @@ export default function App() {
       ))}
 
       <footer className="foot">
-        共 {data.items.length} 卦 · 数据来源：{data.meta.source}
+        共 {withFigure} 卦 · 每卦含六爻爻线与上下卦 · 数据来源：{data.meta.source}
       </footer>
     </main>
   )
