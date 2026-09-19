@@ -24,7 +24,7 @@
    │
    ├─ 读卦数据 ──→ 项目内 JSON（打包进前端，不走网络）
    │
-   └─ 读写进度 ──→ CloudBase PostgreSQL
+   └─ 读写用户数据（起卦记录 / 收藏 / 学习进度）──→ CloudBase PostgreSQL
                      ├─ PostgREST 自动生成的 REST 接口（建表即得，无需写后端）
                      └─ 行级权限 RLS（每个匿名用户只能碰自己的行）
 ```
@@ -86,12 +86,30 @@
 ### 4.1 表结构（示意，字段与 PRD §7.3 一一对应）
 
 ```sql
--- 学习进度主表：一个匿名用户一行
+-- ① 起卦记录：每日第一卦，一天最多一条（F8）
+create table if not exists divination_records (
+  uid            text not null,                   -- 匿名登录返回的用户标识
+  date           date not null,                   -- 用户本地日期，一天一条
+  hexagram_id    smallint not null check (hexagram_id between 1 and 64),
+  changing_lines smallint[] not null default '{}', -- 变爻位置（1-6），可为空数组
+  created_at     timestamptz not null default now(),
+  primary key (uid, date)                         -- 主键即「一天一条」的强制约束
+);
+
+-- ② 收藏
+create table if not exists favorites (
+  uid         text not null,
+  hexagram_id smallint not null check (hexagram_id between 1 and 64),
+  created_at  timestamptz not null default now(),
+  primary key (uid, hexagram_id)
+);
+
+-- ③ 学习进度（F3 测验用，本期为 P1）
 create table if not exists study_progress (
-  uid            text primary key,               -- 匿名登录返回的用户标识
+  uid            text primary key,
   answered_total integer not null default 0,
   correct_total  integer not null default 0,
-  wrong_ids      smallint[] not null default '{}', -- 错题卦序号（1-64）
+  wrong_ids      smallint[] not null default '{}',
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
 );
@@ -108,6 +126,14 @@ create table if not exists study_rounds (
 create index if not exists idx_rounds_uid_time on study_rounds (uid, created_at desc);
 ```
 
+**三个设计要点：**
+
+| 要点 | 说明 |
+| --- | --- |
+| **`primary key (uid, date)`** | 用**数据库主键**强制「一天一条」，不靠应用层判断。重复插入会自然失败，服务端不需要额外查重逻辑 |
+| **用 `date` 而不是 `timestamptz`** | 落实 PRD §7.3「不存精确时刻」的红线；同时避开时区歧义（存的是用户本地日期） |
+| **`changing_lines` 用数组** | 变爻可能有 0 至 6 个 |
+
 ### 4.2 明确「不进数据库」的字段（照抄 PRD §7.3 红线）
 
 姓名、手机号、邮箱、第三方账号、身份证件、**IP 地址**、**设备指纹**、**User-Agent 原始串**、地理位置、任何行为埋点 / 点击流 / 停留时长。
@@ -119,6 +145,19 @@ create index if not exists idx_rounds_uid_time on study_rounds (uid, created_at 
 思路：**每个用户只能看见和修改 `uid` 等于自己的那一行**。策略写法示意（**函数名待 V4 核实**）：
 
 ```sql
+alter table divination_records enable row level security;
+
+create policy "read own records"   on divination_records for select using (uid = auth.uid()::text);
+create policy "insert own records" on divination_records for insert with check (uid = auth.uid()::text);
+create policy "delete own records" on divination_records for delete using (uid = auth.uid()::text);
+-- ⚠️ 故意不建 update 策略 —— 对应 PRD F8「记录不可事后编辑」
+
+alter table favorites enable row level security;
+
+create policy "read own favorites"   on favorites for select using (uid = auth.uid()::text);
+create policy "insert own favorites" on favorites for insert with check (uid = auth.uid()::text);
+create policy "delete own favorites" on favorites for delete using (uid = auth.uid()::text);
+
 alter table study_progress enable row level security;
 
 create policy "read own progress"   on study_progress for select using (uid = auth.uid()::text);
@@ -131,6 +170,8 @@ create policy "read own rounds"   on study_rounds for select using (uid = auth.u
 create policy "insert own rounds" on study_rounds for insert with check (uid = auth.uid()::text);
 ```
 
+> **「不建 update 策略」是刻意的**：让 F8 的「记录不可事后编辑」成为**数据库层的硬约束**，而不是靠前端自觉——前端再怎么改也改不了已存的记录。
+>
 > 若 V4 确认函数名不同，只需替换 `auth.uid()`，策略结构不变。
 
 ---
@@ -155,24 +196,33 @@ create policy "insert own rounds" on study_rounds for insert with check (uid = a
 
 ## 6. 接口设计
 
-### 6.1 读进度
+### 6.1 起卦记录（F8 核心）
 
 ```
-GET /study_progress?uid=eq.<当前用户>&select=*
+POST   /divination_records                                     # 写入每日第一卦
+GET    /divination_records?uid=eq.<当前用户>&order=date.desc   # 记录列表
+DELETE /divination_records?uid=eq.<当前用户>                   # 清空记录
 ```
 
-### 6.2 写进度（答题后）
+> 「一天一条」由**主键冲突**保证：同一天重复 POST 会失败，前端据此判断「今天已记录」。
+> **不需要「先查再写」**——少一次往返，也避免了并发下的竞态。
+
+### 6.2 收藏
 
 ```
-POST /study_progress          # 首次：插入
-PATCH /study_progress?uid=eq.<当前用户>   # 后续：更新
+POST   /favorites                                        # 收藏
+GET    /favorites?uid=eq.<当前用户>&order=created_at.desc
+DELETE /favorites?uid=eq.<当前用户>&hexagram_id=eq.<n>    # 取消收藏
 ```
 
-### 6.3 每轮成绩
+### 6.3 学习进度（F3，本期为 P1）
 
 ```
-POST /study_rounds
-GET  /study_rounds?uid=eq.<当前用户>&order=created_at.desc&limit=10
+GET   /study_progress?uid=eq.<当前用户>&select=*
+POST  /study_progress                      # 首次：插入
+PATCH /study_progress?uid=eq.<当前用户>     # 后续：更新
+POST  /study_rounds
+GET   /study_rounds?uid=eq.<当前用户>&order=created_at.desc&limit=10
 ```
 
 > 以上是 PostgREST 的通用查询语法（`eq` / `order` / `limit`）。**实际路径前缀与鉴权头需要以 CloudBase PG 的接口文档为准**——这是 §3.2 V4 的延伸待核实项。
@@ -310,3 +360,4 @@ tcb hosting deploy dist -e <环境ID>
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
 | v1.0 | 2026-09-19 | 首版。承接 PRD v1.1。完成平台能力核实（区分已核实 / 待核实），确定「PostgREST + RLS、不写云函数」的架构，提出匿名登录替代自造 anonId，列明 PG 计费的重大成本风险与 5 条操作红线 |
+| v1.1 | 2026-09-19 | 承接 PRD v1.3。数据库由 1 类数据扩为 **3 类**（起卦记录 / 收藏 / 学习进度）；新增 `divination_records` 与 `favorites` 两张表；**「一天一条」用主键约束实现**（不靠应用层查重）；**故意不建 update 策略**，让「记录不可编辑」成为数据库层硬约束；§6 接口按 F7 / F8 / F3 重组 |
