@@ -1,0 +1,403 @@
+{
+  "meta": {
+    "total": 64,
+    "source": "data/64卦总表.csv",
+    "pending": [
+      "pinyin",
+      "upperTrigram",
+      "lowerTrigram",
+      "lines",
+      "judgment",
+      "judgmentPlain",
+      "image",
+      "imagePlain",
+      "lineTexts"
+    ]
+  },
+  "items": [
+    {
+      "id": 1,
+      "name": "乾",
+      "symbol": "䷀",
+      "volume": "上经"
+    },
+    {
+      "id": 2,
+      "name": "坤",
+      "symbol": "䷁",
+      "volume": "上经"
+    },
+    {
+      "id": 3,
+      "name": "屯",
+      "symbol": "䷂",
+      "volume": "上经"
+    },
+    {
+      "id": 4,
+      "name": "蒙",
+      "symbol": "䷃",
+      "volume": "上经"
+    },
+    {
+      "id": 5,
+      "name": "需",
+      "symbol": "䷄",
+      "volume": "上经"
+    },
+    {
+      "id": 6,
+      "name": "讼",
+      "symbol": "䷅",
+      "volume": "上经"
+    },
+    {
+      "id": 7,
+      "name": "师",
+      "symbol": "䷆",
+      "volume": "上经"
+    },
+    {
+      "id": 8,
+      "name": "比",
+      "symbol": "䷇",
+      "volume": "上经"
+    },
+    {
+      "id": 9,
+      "name": "小畜",
+      "symbol": "䷈",
+      "volume": "上经"
+    },
+    {
+      "id": 10,
+      "name": "履",
+      "symbol": "䷉",
+      "volume": "上经"
+    },
+    {
+      "id": 11,
+      "name": "泰",
+      "symbol": "䷊",
+      "volume": "上经"
+    },
+    {
+      "id": 12,
+      "name": "否",
+      "symbol": "䷋",
+      "volume": "上经"
+    },
+    {
+      "id": 13,
+      "name": "同人",
+      "symbol": "䷌",
+      "volume": "上经"
+    },
+    {
+      "id": 14,
+      "name": "大有",
+      "symbol": "䷍",
+      "volume": "上经"
+    },
+    {
+      "id": 15,
+      "name": "谦",
+      "symbol": "䷎",
+      "volume": "上经"
+    },
+    {
+      "id": 16,
+      "name": "豫",
+      "symbol": "䷏",
+      "volume": "上经"
+    },
+    {
+      "id": 17,
+      "name": "随",
+      "symbol": "䷐",
+      "volume": "上经"
+    },
+    {
+      "id": 18,
+      "name": "蛊",
+      "symbol": "䷑",
+      "volume": "上经"
+    },
+    {
+      "id": 19,
+      "name": "临",
+      "symbol": "䷒",
+      "volume": "上经"
+    },
+    {
+      "id": 20,
+      "name": "观",
+      "symbol": "䷓",
+      "volume": "上经"
+    },
+    {
+      "id": 21,
+      "name": "噬嗑",
+      "symbol": "䷔",
+      "volume": "上经"
+    },
+    {
+      "id": 22,
+      "name": "贲",
+      "symbol": "䷕",
+      "volume": "上经"
+    },
+    {
+      "id": 23,
+      "name": "剥",
+      "symbol": "䷖",
+      "volume": "上经"
+    },
+    {
+      "id": 24,
+      "name": "复",
+      "symbol": "䷗",
+      "volume": "上经"
+    },
+    {
+      "id": 25,
+      "name": "无妄",
+      "symbol": "䷘",
+      "volume": "上经"
+    },
+    {
+      "id": 26,
+      "name": "大畜",
+      "symbol": "䷙",
+      "volume": "上经"
+    },
+    {
+      "id": 27,
+      "name": "颐",
+      "symbol": "䷚",
+      "volume": "上经"
+    },
+    {
+      "id": 28,
+      "name": "大过",
+      "symbol": "䷛",
+      "volume": "上经"
+    },
+    {
+      "id": 29,
+      "name": "坎",
+      "symbol": "䷜",
+      "volume": "上经"
+    },
+    {
+      "id": 30,
+      "name": "离",
+      "symbol": "䷝",
+      "volume": "上经"
+    },
+    {
+      "id": 31,
+      "name": "咸",
+      "symbol": "䷞",
+      "volume": "下经"
+    },
+    {
+      "id": 32,
+      "name": "恒",
+      "symbol": "䷟",
+      "volume": "下经"
+    },
+    {
+      "id": 33,
+      "name": "遁",
+      "symbol": "䷠",
+      "volume": "下经"
+    },
+    {
+      "id": 34,
+      "name": "大壮",
+      "symbol": "䷡",
+      "volume": "下经"
+    },
+    {
+      "id": 35,
+      "name": "晋",
+      "symbol": "䷢",
+      "volume": "下经"
+    },
+    {
+      "id": 36,
+      "name": "明夷",
+      "symbol": "䷣",
+      "volume": "下经"
+    },
+    {
+      "id": 37,
+      "name": "家人",
+      "symbol": "䷤",
+      "volume": "下经"
+    },
+    {
+      "id": 38,
+      "name": "睽",
+      "symbol": "䷥",
+      "volume": "下经"
+    },
+    {
+      "id": 39,
+      "name": "蹇",
+      "symbol": "䷦",
+      "volume": "下经"
+    },
+    {
+      "id": 40,
+      "name": "解",
+      "symbol": "䷧",
+      "volume": "下经"
+    },
+    {
+      "id": 41,
+      "name": "损",
+      "symbol": "䷨",
+      "volume": "下经"
+    },
+    {
+      "id": 42,
+      "name": "益",
+      "symbol": "䷩",
+      "volume": "下经"
+    },
+    {
+      "id": 43,
+      "name": "夬",
+      "symbol": "䷪",
+      "volume": "下经"
+    },
+    {
+      "id": 44,
+      "name": "姤",
+      "symbol": "䷫",
+      "volume": "下经"
+    },
+    {
+      "id": 45,
+      "name": "萃",
+      "symbol": "䷬",
+      "volume": "下经"
+    },
+    {
+      "id": 46,
+      "name": "升",
+      "symbol": "䷭",
+      "volume": "下经"
+    },
+    {
+      "id": 47,
+      "name": "困",
+      "symbol": "䷮",
+      "volume": "下经"
+    },
+    {
+      "id": 48,
+      "name": "井",
+      "symbol": "䷯",
+      "volume": "下经"
+    },
+    {
+      "id": 49,
+      "name": "革",
+      "symbol": "䷰",
+      "volume": "下经"
+    },
+    {
+      "id": 50,
+      "name": "鼎",
+      "symbol": "䷱",
+      "volume": "下经"
+    },
+    {
+      "id": 51,
+      "name": "震",
+      "symbol": "䷲",
+      "volume": "下经"
+    },
+    {
+      "id": 52,
+      "name": "艮",
+      "symbol": "䷳",
+      "volume": "下经"
+    },
+    {
+      "id": 53,
+      "name": "渐",
+      "symbol": "䷴",
+      "volume": "下经"
+    },
+    {
+      "id": 54,
+      "name": "归妹",
+      "symbol": "䷵",
+      "volume": "下经"
+    },
+    {
+      "id": 55,
+      "name": "丰",
+      "symbol": "䷶",
+      "volume": "下经"
+    },
+    {
+      "id": 56,
+      "name": "旅",
+      "symbol": "䷷",
+      "volume": "下经"
+    },
+    {
+      "id": 57,
+      "name": "巽",
+      "symbol": "䷸",
+      "volume": "下经"
+    },
+    {
+      "id": 58,
+      "name": "兑",
+      "symbol": "䷹",
+      "volume": "下经"
+    },
+    {
+      "id": 59,
+      "name": "涣",
+      "symbol": "䷺",
+      "volume": "下经"
+    },
+    {
+      "id": 60,
+      "name": "节",
+      "symbol": "䷻",
+      "volume": "下经"
+    },
+    {
+      "id": 61,
+      "name": "中孚",
+      "symbol": "䷼",
+      "volume": "下经"
+    },
+    {
+      "id": 62,
+      "name": "小过",
+      "symbol": "䷽",
+      "volume": "下经"
+    },
+    {
+      "id": 63,
+      "name": "既济",
+      "symbol": "䷾",
+      "volume": "下经"
+    },
+    {
+      "id": 64,
+      "name": "未济",
+      "symbol": "䷿",
+      "volume": "下经"
+    }
+  ]
+}
