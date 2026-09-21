@@ -171,6 +171,33 @@
 .cr-btn-primary:hover { background: #332c26; border-color: #332c26; color: #f5f2ec; }
 .cr-btn-wide { display: block; width: 100%; margin-top: 20px; }
 
+/* 次级动作：收藏 / 再起一卦（比两个交互键低一档） */
+.cr-actions-sub { margin-top: 10px; }
+.cr-btn-mini {
+  padding: 7px 16px;
+  font-size: 13px;
+  border-color: rgba(27, 23, 20, .22);
+  background: rgba(253, 251, 246, .6);
+}
+.cr-btn-mini.is-on { color: #8a5a00; background: #fdf6e3; border-color: #e3c778; }
+
+/* 与存档的关系（F8：每天的第一卦才入记录） */
+.cr-archive {
+  display: block;
+  width: 100%;
+  margin: 14px 0 4px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: #574f47;
+}
+.cr-archive b { color: #241f1b; }
+.cr-archive.is-in {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(27, 23, 20, .055);
+}
+
 /* ── 三层解读 ── */
 .cr-reading { margin-top: 22px; animation: cr-in .5s ease both; }
 .cr-layer { padding: 18px 0; border-top: 1px solid rgba(27, 23, 20, .12); }

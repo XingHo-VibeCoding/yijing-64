@@ -251,7 +251,16 @@ function HexFigure({ lines, highlight = [], dimOthers = false }) {
   )
 }
 
-export default function CastingAnimation({ result, changingLines = [], onEnterList, onEnterDetail }) {
+export default function CastingAnimation({
+  result,
+  changingLines = [],
+  archived = false,
+  favorited = false,
+  onToggleFav,
+  onRecast,
+  onEnterList,
+  onEnterDetail,
+}) {
   const [phase, setPhase] = useState('casting')
   const [focusOn, setFocusOn] = useState(false)
   const [focusing, setFocusing] = useState(false)
@@ -483,6 +492,10 @@ export default function CastingAnimation({ result, changingLines = [], onEnterLi
         <CastResult
           result={result}
           changingLines={changingLines}
+          archived={archived}
+          favorited={favorited}
+          onToggleFav={onToggleFav}
+          onRecast={onRecast}
           onFocusLine={handleFocus}
           focusing={focusing}
           onEnterList={() => onEnterList && onEnterList(result.id)}

@@ -39,6 +39,10 @@ export default function CastResult({
   changingLines = [],
   onFocusLine,
   focusing = false,
+  archived = false,
+  favorited = false,
+  onToggleFav,
+  onRecast,
   onEnterList,
   onEnterDetail,
 }) {
@@ -77,6 +81,15 @@ export default function CastResult({
           </p>
         </header>
 
+        {/* ── 与存档的关系（PRD F8：每天的第一卦才入记录） ── */}
+        <p className={'cr-archive' + (archived ? ' is-in' : '')}>
+          {archived ? (
+            <>今天的卦<b>已记录</b> —— 日后可以在「我的记录」里回看这一天起的正是这一卦。</>
+          ) : (
+            <>今天的第一卦已经记过了，<b>本卦仅作娱乐，不入记录</b>。</>
+          )}
+        </p>
+
         {/* ── 变爻：触发第二段水墨动画 ── */}
         {changingYaos.length > 0 && (
           <div className="cr-focus">
@@ -99,6 +112,20 @@ export default function CastResult({
           </button>
           <button type="button" className="cr-btn" onClick={onEnterList}>
             进入卦象爻辞总表
+          </button>
+        </div>
+
+        {/* ── 次级动作：收藏与再起一卦（收藏与存档是两件事） ── */}
+        <div className="cr-actions cr-actions-sub">
+          <button
+            type="button"
+            className={'cr-btn cr-btn-mini' + (favorited ? ' is-on' : '')}
+            onClick={onToggleFav}
+          >
+            {favorited ? '★ 已收藏' : '☆ 收藏这一卦'}
+          </button>
+          <button type="button" className="cr-btn cr-btn-mini" onClick={onRecast}>
+            再起一卦
           </button>
         </div>
 

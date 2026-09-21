@@ -3,7 +3,9 @@ import data from '../data/64卦.json'
 import yaoData from '../data/64卦-爻辞.json'
 import HexagramFigure from './HexagramFigure.jsx'
 import CastingAnimation from './CastingAnimation.jsx'
+import Records from './Records.jsx'
 import SourceTag from './SourceTag.jsx'
+import * as store from './storage.js'
 
 const VOLUMES = [
   { key: '上经', range: '1–30' },
@@ -23,33 +25,64 @@ function castOnce() {
 
 export default function App() {
   const [currentId, setCurrentId] = useState(null)
-  const [casting, setCasting] = useState(null)
-  /** 从起卦结果页跳回总表时，要定位并高亮的卦 */
+  const [casting, setCasting] = useState(null)   // { id, changing, archived }
+  const [castSeq, setCastSeq] = useState(0)      // 作为 key：保证「再起一卦」真的从头播
   const [highlightId, setHighlightId] = useState(null)
+  const [view, setView] = useState('list')       // 'list' | 'records'
+  const [backTo, setBackTo] = useState('list')   // 详情页「返回」回到哪
+  const [, setTick] = useState(0)
+  const bump = () => setTick((n) => n + 1)       // 本地存储变动后强制重读
 
+  const records = store.loadRecords()
+  const favorites = store.loadFavorites()
   const current = currentId === null ? null : data.items.find((h) => h.id === currentId)
 
   /* 回到总表时，把刚起的卦滚到视野中间 */
   useEffect(() => {
-    if (casting || currentId !== null || highlightId == null) return
+    if (casting || currentId !== null || view !== 'list' || highlightId == null) return
     const el = document.querySelector(`[data-hid="${highlightId}"]`)
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [casting, currentId, highlightId])
+  }, [casting, currentId, view, highlightId])
+
+  /* ---------- 起卦：一键出结果，并判定是否入档 ---------- */
+  const startCast = () => {
+    const c = castOnce()
+    // 每天的第一卦自动存档；今天已有记录则本卦不入档（PRD F8）
+    const archived = store.archiveFirstOfToday(c.id, c.changing)
+    setCastSeq((n) => n + 1)
+    setCasting({ ...c, archived })
+    bump()
+  }
+
+  const openDetail = (id, from = 'list') => {
+    setBackTo(from)
+    setView('list')
+    setCurrentId(id)
+  }
 
   /* ---------- 起卦流程（动画 + 结果页） ---------- */
   if (casting) {
     const target = data.items.find((h) => h.id === casting.id)
     return (
       <CastingAnimation
+        key={castSeq}
         result={target}
         changingLines={casting.changing}
+        archived={casting.archived}
+        favorited={favorites.some((f) => f.hexagramId === casting.id)}
+        onToggleFav={() => {
+          store.toggleFavorite(casting.id)
+          bump()
+        }}
+        onRecast={startCast}
         onEnterList={(id) => {
           setCasting(null)
+          setView('list')
           setHighlightId(id)
         }}
         onEnterDetail={(id) => {
           setCasting(null)
-          setCurrentId(id)
+          openDetail(id, 'list')
         }}
       />
     )
@@ -60,12 +93,32 @@ export default function App() {
     const yaos = yaoData.byId[String(current.id)] || []
     const fortune = current.fortune || '平'
     const basis = current.fortuneBasis || []
+    const fav = favorites.some((f) => f.hexagramId === current.id)
 
     return (
       <main className="page">
-        <button type="button" className="back" onClick={() => setCurrentId(null)}>
-          ← 返回总表
-        </button>
+        <div className="detail-bar">
+          <button
+            type="button"
+            className="back"
+            onClick={() => {
+              setCurrentId(null)
+              setView(backTo)
+            }}
+          >
+            ← {backTo === 'records' ? '返回记录' : '返回总表'}
+          </button>
+          <button
+            type="button"
+            className={'fav-btn' + (fav ? ' is-on' : '')}
+            onClick={() => {
+              store.toggleFavorite(current.id)
+              bump()
+            }}
+          >
+            {fav ? '★ 已收藏' : '☆ 收藏这一卦'}
+          </button>
+        </div>
 
         <header className="detail-head">
           <div className="detail-symbol" aria-hidden="true">{current.symbol}</div>
@@ -155,6 +208,26 @@ export default function App() {
     )
   }
 
+  /* ---------- F8 过往起卦记录 ---------- */
+  if (view === 'records') {
+    return (
+      <Records
+        records={records}
+        favorites={favorites}
+        onOpen={(id) => openDetail(id, 'records')}
+        onClear={() => {
+          store.clearAll()
+          bump()
+        }}
+        onToggleFav={(id) => {
+          store.toggleFavorite(id)
+          bump()
+        }}
+        onBack={() => setView('list')}
+      />
+    )
+  }
+
   /* ---------- 卦象爻辞总表 ---------- */
   const total = data.items.length
 
@@ -165,9 +238,21 @@ export default function App() {
         <p className="sub">认识卦象 · 读懂原文 · 记住卦序</p>
 
         {/* 全页视觉权重最高的动作（PRD F7） */}
-        <button type="button" className="cast-cta" onClick={() => setCasting(castOnce())}>
+        <button type="button" className="cast-cta" onClick={startCast}>
           <span className="cast-cta-main">起 一 卦</span>
           <span className="cast-cta-sub">成事在人，莫问前程</span>
+        </button>
+
+        {/* 我的记录入口（PRD F1：次级按钮） */}
+        <button type="button" className="my-records" onClick={() => setView('records')}>
+          我的记录
+          {records.length + favorites.length > 0 ? (
+            <span className="my-records-n">
+              {records.length} 条记录 · {favorites.length} 个收藏
+            </span>
+          ) : (
+            <span className="my-records-n">每天第一卦会自动记在这里</span>
+          )}
         </button>
 
         <p className="boundary">本页不提供占卜、预测与运势判断</p>
@@ -189,7 +274,7 @@ export default function App() {
                     data-hid={h.id}
                     onClick={() => {
                       setHighlightId(null)
-                      setCurrentId(h.id)
+                      openDetail(h.id, 'list')
                     }}
                   >
                     <span className="item-id">{h.id}</span>

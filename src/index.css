@@ -196,3 +196,110 @@ body {
   letter-spacing: .3em; text-indent: .3em;   /* 让「起 一 卦」视觉居中 */
 }
 .cast-cta-sub { font-size: 12px; letter-spacing: .14em; opacity: .68; }
+
+/* ---------- 首页「我的记录」入口（次级动作，视觉权重低于起卦） ---------- */
+.my-records {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  width: 100%; max-width: 330px; margin: 10px auto 0;
+  padding: 9px 20px;
+  font: inherit; font-size: 14px; color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.my-records:hover { border-color: #85b7eb; background: #eef6ff; }
+.my-records-n { font-size: 11.5px; color: #8c959f; }
+
+/* ---------- 详情页顶部动作条 ---------- */
+.detail-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.fav-btn {
+  padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer;
+  color: var(--ink-soft); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.fav-btn:hover { border-color: #d9a93a; color: #8a5a00; }
+.fav-btn.is-on { color: #8a5a00; background: #fdf6e3; border-color: #e3c778; }
+
+/* ============================================================
+   F8 · 过往起卦记录与收藏
+   ============================================================ */
+.rec-head { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.rec-title { margin: 0; font-size: 24px; font-weight: 600; }
+.rec-sub { margin: 8px 0 0; font-size: 13.5px; line-height: 1.85; color: var(--ink-soft); }
+
+.rec-tabs { display: flex; gap: 8px; margin-top: 20px; }
+.rec-tab {
+  padding: 8px 16px; font: inherit; font-size: 14px; cursor: pointer;
+  color: var(--ink-soft); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.rec-tab:hover { border-color: #85b7eb; }
+.rec-tab.is-on { color: #f5f2ec; background: #1b1714; border-color: #1b1714; }
+.rec-tab-n { font-size: 12px; opacity: .75; }
+
+.rec-list { margin-top: 18px; }
+.rec-ul { list-style: none; margin: 0; padding: 0; }
+.rec-ul li { margin-bottom: 10px; }
+
+.rec-item {
+  display: block; width: 100%; text-align: left;
+  padding: 14px 18px; font: inherit; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid #b9b2a6; border-radius: 0 10px 10px 0;
+  transition: border-color .15s, background .15s;
+}
+.rec-item:hover { background: #eef6ff; border-color: #85b7eb; border-left-color: #85b7eb; }
+.rec-item-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rec-date { font-size: 12.5px; color: #8c959f; font-variant-numeric: tabular-nums; }
+.rec-symbol { font-size: 22px; line-height: 1; }
+.rec-name { display: flex; align-items: baseline; gap: 8px; font-size: 17px; font-weight: 600; }
+.rec-id { font-size: 11.5px; font-weight: 400; color: #8c959f; }
+.rec-changing {
+  margin-left: auto; font-size: 12px; color: #8c2f21;
+  background: #fbeae7; border: 1px solid #efc7bf; border-radius: 999px; padding: 1px 9px;
+}
+.rec-judgment {
+  margin: 8px 0 0;
+  font-family: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "SimSun-ExtB", "STSong", serif;
+  font-size: 15.5px; line-height: 1.7; color: #3a342e;
+}
+
+/* 收藏项：左侧主体可点，右侧取消收藏 */
+.rec-item-fav { display: flex; align-items: center; gap: 12px; border-left-color: #e3c778; }
+.rec-fav-main {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  padding: 0; font: inherit; text-align: left;
+  background: none; border: 0; cursor: pointer; color: inherit;
+}
+.rec-fav-off {
+  flex: none; padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer;
+  color: var(--ink-soft); background: #fff;
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.rec-fav-off:hover { color: #8c2f21; border-color: #efc7bf; }
+
+.rec-empty {
+  margin: 0; padding: 22px 24px; font-size: 14px; line-height: 1.9; color: var(--ink-soft);
+  background: var(--surface); border: 1px dashed var(--line); border-radius: 10px;
+}
+.rec-empty b { color: var(--ink); }
+
+.rec-danger { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
+.rec-btn {
+  padding: 9px 18px; font: inherit; font-size: 13.5px; cursor: pointer;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.rec-btn:hover { border-color: #85b7eb; }
+.rec-btn-ghost { color: var(--ink-soft); }
+.rec-btn-danger { color: #fff; background: #a83a29; border-color: #a83a29; }
+.rec-btn-danger:hover { background: #8f3021; border-color: #8f3021; }
+
+.rec-confirm {
+  padding: 16px 18px; background: #fdecea;
+  border: 1px solid #efc7bf; border-radius: 10px;
+}
+.rec-confirm-text { margin: 0 0 12px; font-size: 14px; color: #8a1c12; }
+.rec-confirm-row { display: flex; gap: 10px; }
