@@ -12,14 +12,25 @@ const VOLUMES = [
   { key: '下经', range: '31–64' },
 ]
 
-/** 一键起卦：六爻各自随机（阳 / 阴各半），再按六爻查卦；变爻按传统概率取（每爻 1/4） */
+/**
+ * 「这一卦至少有一个变爻」的概率。
+ * 传统取法里每爻有 1/4 是变爻（老阳 3/16 + 老阴 1/16），六爻独立 →
+ * 至少一个变爻的概率 = 1 − (3/4)^6 ≈ 0.822。
+ */
+const P_HAS_CHANGING = 1 - Math.pow(0.75, 6)
+
+/**
+ * 一键起卦：六爻各自随机（阳 / 阴各半），再按六爻查卦。
+ *
+ * 变爻**一次只取一爻**——解读要聚焦，第二段动画也只突出这一爻。
+ * 做法等价于「先按每爻 1/4 各自判定，再只留一爻」，但结果确定只有一个：
+ * 先按上式的概率决定「有没有变爻」，再在六爻中均匀取一爻
+ * （在传统模型里，条件于「至少一个变爻」时，变爻位置本就是均匀分布）。
+ */
 function castOnce() {
   const lines = Array.from({ length: 6 }, () => (Math.random() < 0.5 ? 1 : 0))
   const hit = data.items.find((h) => h.lines.join('') === lines.join('')) || data.items[0]
-  const changing = []
-  lines.forEach((_, i) => {
-    if (Math.random() < 0.25) changing.push(i + 1)
-  })
+  const changing = Math.random() < P_HAS_CHANGING ? [1 + Math.floor(Math.random() * 6)] : []
   return { id: hit.id, changing }
 }
 
@@ -67,7 +78,8 @@ export default function App() {
       <CastingAnimation
         key={castSeq}
         result={target}
-        changingLines={casting.changing}
+        // 只取第一个：解读聚焦一爻（万一有历史数据带多个变爻，界面也不会出现「多爻齐亮」）
+        changingLines={casting.changing.slice(0, 1)}
         archived={casting.archived}
         favorited={favorites.some((f) => f.hexagramId === casting.id)}
         onToggleFav={() => {

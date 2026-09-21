@@ -59,8 +59,10 @@ export default function CastResult({
   }, [open])
 
   const yaos = yaoData.byId[String(result.id)] || []
-  // 变爻取爻辞：changingLines 是 1–6 的位置，爻辞数组按「初→上」排列
+  // 变爻**只取一爻**（解读聚焦）：changingLines 是 1–6 的位置，爻辞数组按「初→上」排列。
+  // 这里再 slice 一次 —— 即使历史数据里存了多个变爻，界面也不会出现「多爻齐亮」
   const changingYaos = changingLines
+    .slice(0, 1)
     .map((pos) => ({ pos, yao: yaos[pos - 1] }))
     .filter((x) => x.yao)
 
@@ -99,7 +101,7 @@ export default function CastResult({
               onClick={onFocusLine}
               disabled={focusing}
             >
-              {focusing ? '墨正翻涌…' : `看这一爻 · ${changingYaos.map((x) => x.yao.label).join(' / ')}`}
+              {focusing ? '墨正翻涌…' : `看这一爻 · ${changingYaos[0].yao.label}`}
             </button>
             <span className="cr-focus-hint">其余各爻会淡下去，只留这一爻给你看</span>
           </div>

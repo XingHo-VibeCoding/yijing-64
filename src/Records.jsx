@@ -5,9 +5,10 @@ import SourceTag from './SourceTag.jsx'
 const ITEM = (id) => hexData.items.find((h) => h.id === id)
 const ORDER = ['初', '二', '三', '四', '五', '上']
 
-/** 变爻位置 → 爻题（初九 / 六二 / 上六……），阴阳取自该卦的爻线 */
+/** 变爻位置 → 爻题（初九 / 六二 / 上六……），阴阳取自该卦的爻线。只取一爻。 */
 function yaoLabels(hex, positions) {
   return (positions || [])
+    .slice(0, 1)
     .map((p) => {
       const isYang = hex.lines[p - 1] === 1
       const num = isYang ? '九' : '六'
@@ -15,7 +16,7 @@ function yaoLabels(hex, positions) {
       if (p === 6) return `上${num}`
       return `${num}${ORDER[p - 1]}`
     })
-    .join(' · ')
+    .join('')
 }
 
 /**
