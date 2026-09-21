@@ -19,6 +19,10 @@ data/__*.json
 # 数据合并的中间产物（正式数据已写入 data/64卦.json）
 data/64卦-new.json
 
+# 数据流图导出的旧版本（正式文件是 data-flow.png / cast-write-flow.png）
+docs/img/data-flow-v2.png
+docs/img/cast-write-flow-v2.png
+
 # 本地配置文件（存数据库密码、API Key 等）
 .env
 .env.*

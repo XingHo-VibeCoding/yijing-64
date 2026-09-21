@@ -1,0 +1,8 @@
+flowchart LR
+    J["卦数据 · 打包进前端的 JSON"] --> P
+    C["起卦结果 · 本地随机计算"] --> P
+    A["CloudBase · 匿名登录<br/>签发 uid"] --> P
+    P["页面<br/>总表 / 详情 / 起卦动画"] --> LS["localStorage<br/>本地副本与暂存"]
+    P -- "写入今日第一卦 / 收藏 / 进度" --> REST["CloudBase · PostgREST<br/>建表即得 REST 接口"]
+    REST --> DB["CloudBase · PostgreSQL<br/>起卦记录 / 收藏 / 学习进度"]
+    REST -. "只取回该 uid 自己的行" .-> P
