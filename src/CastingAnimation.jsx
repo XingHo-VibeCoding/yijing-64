@@ -28,10 +28,13 @@ const T_REVEAL_END = T_OUT_END + T.reveal
 
 const easeOutCubic = (p) => 1 - Math.pow(1 - p, 3)
 
-/** 各阶段图案的不透明度：墨涌上来时图案同步淡出，两者配合才叫「遮住」 */
-const FIG_OPACITY = { casting: 1, inkIn: 0.22, hold: 0, inkOut: 0.55, reveal: 0, done: 0 }
 const easeInOutCubic = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
+
+/* 交叉淡入淡出用时间点 —— 一律逐帧算，不用 CSS 过渡：
+   分段跳变（按 phase 切 opacity）会让「图案渐隐 / 卦象浮现」显得生硬 */
+const T_HEX_IN_START = T_HOLD_END + T.inkOut * 0.5     // 墨散到一半，卦象才开始显
+const T_HEX_IN_END = T_OUT_END + T.reveal * 0.55       // 略早于结果页出现，收尾更顺
 
 /** 便于逐帧验证：URL 加 ?castSpeed=0.2 即以 1/5 速度播放 */
 const SPEED = (() => {
@@ -215,12 +218,12 @@ function Taiji({ R = 42 }) {
     `A ${R / 2} ${R / 2} 0 0 0 0 ${-R} Z`
   return (
     <g>
-      {/* 黑鱼 */}
+      {/* 黑鱼（头在下方：下半个小圆向左鼓起，那里最宽） */}
       <path d={d} fill="#1b1714" />
-      {/* 白眼（黑鱼中的白点） */}
-      <circle cx="0" cy={-R / 2} r={R / 6} fill="#f5f2ec" />
-      {/* 黑眼（白鱼中的黑点） */}
-      <circle cx="0" cy={R / 2} r={R / 6} fill="#1b1714" />
+      {/* 黑鱼的白眼 */}
+      <circle cx="0" cy={R / 2} r={R / 6} fill="#f5f2ec" />
+      {/* 白鱼的黑眼（白鱼的头在上方，是留白那一半） */}
+      <circle cx="0" cy={-R / 2} r={R / 6} fill="#1b1714" />
       {/* 外圈 */}
       <circle r={R} fill="none" stroke="#1b1714" strokeWidth="1.7" opacity="0.9" />
     </g>
@@ -259,7 +262,10 @@ export default function CastingAnimation({ result, changingLines = [], onEnterLi
   const ringRefs = [useRef(null), useRef(null), useRef(null)]
   const blobsRef = useRef([])
   const dotRef = useRef(null)
-  const focusRef = useRef(null)   // { start, active }
+  const focusRef = useRef(null)   // { start, active, primed }
+  const hexRef = useRef(null)     // 卦象组（逐帧改透明度）
+  const hexScaleRef = useRef(null) // 卦象缩放外壳（逐帧写 transform 属性）
+  const figRef = useRef(null)     // 起卦图案组（双鱼 + 三圈）
 
   /* ---------- rAF 主循环 ---------- */
   useEffect(() => {
@@ -290,6 +296,7 @@ export default function CastingAnimation({ result, changingLines = [], onEnterLi
     const RING_TURNS = [7, -9, 11]     // 三圈：圈数不同、方向交错
     let start = performance.now()
     let lastPhase = 'casting'
+    let doneAt = null                  // 进入 done（结果页出现）的时刻，用于放大卦象
 
     const loop = (now) => {
       const el = FREEZE != null ? FREEZE : (now - start) * SPEED
@@ -328,7 +335,7 @@ export default function CastingAnimation({ result, changingLines = [], onEnterLi
         }
       }
 
-      /* --- 墨的浓度曲线 --- */
+      /* --- 墨的浓度曲线（同时给出归一化进度，供交叉淡入淡出用） --- */
       // 背景墨：全程翻涌。动画中 0.30；出结果页后降到 0.14 —— 结果页的文字压在水墨上，
       // 浓度高会让小字读不清，也让顶部的卦象发灰
       const bgInt = ph === 'reveal' || ph === 'done' ? 0.14 : 0.30
@@ -336,37 +343,70 @@ export default function CastingAnimation({ result, changingLines = [], onEnterLi
       // 覆盖墨（第一段）：从四周涌上来，**盖在图案之上**（1.7 倍强度 → 真正遮住）
       let coverMain = 0
       let converge = 0
+      let covMain = 0                                   // 归一化进度 0–1
       if (ph === 'inkIn') {
-        const p = clamp01((el - T_CAST_END) / T.inkIn)
-        coverMain = easeInOutCubic(p) * 1.7
-        converge = easeInOutCubic(p)
+        covMain = easeInOutCubic(clamp01((el - T_CAST_END) / T.inkIn))
+        converge = covMain
       } else if (ph === 'hold') {
-        coverMain = 1.7
+        covMain = 1
         converge = 1
       } else if (ph === 'inkOut') {
-        const p = clamp01((el - T_HOLD_END) / T.inkOut)
-        coverMain = (1 - easeInOutCubic(p)) * 1.7
-        converge = 1 - easeInOutCubic(p)
+        covMain = 1 - easeInOutCubic(clamp01((el - T_HOLD_END) / T.inkOut))
+        converge = covMain
       }
+      coverMain = covMain * 1.7
 
       /* --- 第二段：点击后墨再翻涌 --- */
-      let coverFocus = 0
+      let covFocus = 0
+      let fHex = 1                                      // 第二段里卦象自身的透明度
       const f = focusRef.current
       if (f && f.active) {
         const ft = (now - f.start) * SPEED
         if (ft < T.focusIn) {
-          coverFocus = easeInOutCubic(ft / T.focusIn)
+          const p = clamp01(ft / T.focusIn)
+          covFocus = easeInOutCubic(p)
+          fHex = 1 - clamp01(p * 1.6)                   // 墨涌上来，卦象同步隐去
         } else if (ft < T.focusIn + T.focusHold) {
-          coverFocus = 1
+          covFocus = 1
+          fHex = 0
+          // 变爻的淡化在「墨还遮着」时就完成 —— 等墨散开，卦象已经安静下来了
+          if (!f.primed) {
+            f.primed = true
+            setFocusOn(true)
+          }
         } else if (ft < T.focusIn + T.focusHold + T.focusOut) {
-          coverFocus = 1 - easeInOutCubic((ft - T.focusIn - T.focusHold) / T.focusOut)
+          const p = clamp01((ft - T.focusIn - T.focusHold) / T.focusOut)
+          covFocus = 1 - easeInOutCubic(p)
+          fHex = clamp01((p - 0.3) / 0.7)               // 墨散到后半程，卦象才慢慢显出来
         } else {
-          coverFocus = 0
+          covFocus = 0
+          fHex = 1
           f.active = false
-          setFocusOn(true)
           setFocusing(false)
         }
       }
+      const coverFocus = covFocus * 1.7
+
+      /* --- 交叉淡入淡出（逐帧，才算顺） --- */
+      // 卦象：墨散到一半开始浮现，到结果页出现前刚好到位
+      const hexBase = clamp01((el - T_HEX_IN_START) / (T_HEX_IN_END - T_HEX_IN_START))
+      const hexOp = Math.min(hexBase, fHex)
+      if (hexRef.current) hexRef.current.style.opacity = hexOp.toFixed(3)
+
+      // 结果页出现后再放大一档，让六爻填满画面（viewBox 230 里卦象只占 90，不放大就留一大片空）
+      // ⚠️ 用 SVG transform 属性，不用 CSS transform：viewBox 的 min-x/min-y 是负数（-115）时，
+      //    CSS 的 transform-box: view-box + transform-origin: center 会把原点算到右下角，
+      //    图形直接被甩出屏幕。SVG 属性则在图形自己的坐标系里缩放，原点就是中心。
+      if (ph === 'done' && doneAt === null) doneAt = now
+      const growP = doneAt === null ? 0 : clamp01((now - doneAt) / 950)
+      const scale = (1 + 1.25 * easeOutCubic(growP)) * (0.92 + 0.08 * hexOp)
+      if (hexScaleRef.current) hexScaleRef.current.setAttribute('transform', `scale(${scale.toFixed(4)})`)
+
+      // 图案（双鱼 + 三圈）：墨涌上来就跟着渐隐，之后一去不回
+      // 用时间函数而不是「记住状态」—— 分段跳变或状态残留都会让过渡生硬
+      const figOut = clamp01((el - T_CAST_END) / (T.inkIn * 0.62))
+      const figOp = el >= T_INK_END ? 0 : 1 - figOut
+      if (figRef.current) figRef.current.style.opacity = figOp.toFixed(3)
 
       // 墨始终用真实时间推进 → 即使定格，墨水也在流动
       drawInk(ctxBg, w, h, blobsRef.current, dotRef.current, now * 0.5 + 4000, bgInt, 0)
@@ -395,12 +435,11 @@ export default function CastingAnimation({ result, changingLines = [], onEnterLi
     if (phase !== 'done' && phase !== 'reveal') return
     const f = focusRef.current
     if (f && f.active) return
-    focusRef.current = { start: performance.now(), active: true }
-    setFocusOn(false)
+    // 不要在这里把 focusOn 复位 —— 那会让「淡化」在点击瞬间可见地跳一下；
+    // 真正的淡化放在墨遮住之后（见主循环里的 primed）
+    focusRef.current = { start: performance.now(), active: true, primed: false }
     setFocusing(true)
   }
-
-  const showHex = phase === 'reveal' || phase === 'done'
 
   return (
     <div className={'cast-root' + (phase === 'done' ? ' is-result' : '')}>
@@ -410,30 +449,19 @@ export default function CastingAnimation({ result, changingLines = [], onEnterLi
       <canvas ref={coverRef} className="cast-canvas cast-cover" />
 
       <svg className="cast-stage" viewBox="-115 -115 230 230" aria-hidden="true">
-        {/* 卦象（墨散去后浮现） */}
-        <g
-          className="cast-hex"
-          style={{
-            opacity: showHex ? 1 : 0,
-            transform: showHex ? 'scale(1)' : 'scale(.86)',
-            transition: `opacity ${T.reveal}ms ease, transform ${T.reveal}ms cubic-bezier(.2,.8,.3,1)`,
-          }}
-        >
-          <HexFigure
-            lines={result.lines}
-            highlight={changingLines}
-            dimOthers={focusOn && changingLines.length > 0}
-          />
+        {/* 卦象（墨散开时浮现；透明度与缩放由主循环逐帧写 SVG transform 属性） */}
+        <g className="cast-hex-scale" ref={hexScaleRef}>
+          <g className="cast-hex" ref={hexRef} style={{ opacity: 0 }}>
+            <HexFigure
+              lines={result.lines}
+              highlight={changingLines}
+              dimOthers={focusOn && changingLines.length > 0}
+            />
+          </g>
         </g>
 
-        {/* 起卦图案：墨涌上来时同步淡出，配合墨做到真正遮住 */}
-        <g
-          className="cast-figure"
-          style={{
-            opacity: showHex ? 0 : (FIG_OPACITY[phase] ?? 1),
-            transition: 'opacity 700ms ease',
-          }}
-        >
+        {/* 起卦图案：墨涌上来时同步渐隐（同样逐帧给），配合墨做到真正遮住 */}
+        <g className="cast-figure" ref={figRef}>
           {/* 外侧虚圆：运不只是表面预测 */}
           <circle r="103" className="cast-dashed" />
           <circle r="88" className="cast-dashed cast-dashed-thin" />

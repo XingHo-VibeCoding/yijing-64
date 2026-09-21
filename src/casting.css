@@ -60,10 +60,12 @@
   opacity: 0.24;
 }
 
-.cast-hex {
-  transform-box: view-box;
-  transform-origin: center;
-}
+/* 卦象的透明度和缩放全部由主循环逐帧写（opacity 用 style、scale 用 SVG transform 属性）。
+   ⚠️ 刻意不用 CSS transform：viewBox 的 min-x/min-y 是负数（-115,-115）时，
+   `transform-box: view-box` + `transform-origin: center` 会被算成 115px 115px（右下角），
+   整组图形被甩出屏幕 —— 曾因此把卦象画到屏幕外。 */
+.cast-hex,
+.cast-hex-scale { /* 仅作定位锚点，不加 transform */ }
 
 .cast-figure { pointer-events: none; }
 
@@ -73,20 +75,20 @@
    ============================================================ */
 
 .cast-root.is-result .cast-stage {
-  top: 22%;
-  width: min(36vmin, 200px);
-  height: min(36vmin, 200px);
+  top: 24%;
+  width: min(44vmin, 320px);
+  height: min(44vmin, 320px);
   transition:
-    top .9s cubic-bezier(.2, .8, .3, 1),
-    width .9s cubic-bezier(.2, .8, .3, 1),
-    height .9s cubic-bezier(.2, .8, .3, 1);
+    top .95s cubic-bezier(.2, .8, .3, 1),
+    width .95s cubic-bezier(.2, .8, .3, 1),
+    height .95s cubic-bezier(.2, .8, .3, 1);
 }
 
 .cast-result {
   position: absolute;
   left: 0;
   right: 0;
-  top: 39%;
+  top: 47%;
   bottom: 0;
   z-index: 5;
   overflow-y: auto;
@@ -224,6 +226,6 @@
   .cr-name { font-size: 26px; }
   .cr-layer-body { font-size: 14.5px; }
   .cr-classic { font-size: 16px; }
-  .cast-root.is-result .cast-stage { top: 20%; width: min(32vmin, 168px); height: min(32vmin, 168px); }
-  .cast-result { top: 36%; padding: 0 16px 44px; }
+  .cast-root.is-result .cast-stage { top: 20%; width: min(40vmin, 230px); height: min(40vmin, 230px); }
+  .cast-result { top: 41%; padding: 0 16px 44px; }
 }
