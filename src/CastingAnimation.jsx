@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './casting.css'
+import CastResult from './CastResult.jsx'
 
 /* ============================================================
    起卦动画（F7）
@@ -247,9 +248,10 @@ function HexFigure({ lines, highlight = [], dimOthers = false }) {
   )
 }
 
-export default function CastingAnimation({ result, changingLines = [], onFinish }) {
+export default function CastingAnimation({ result, changingLines = [], onEnterList, onEnterDetail }) {
   const [phase, setPhase] = useState('casting')
   const [focusOn, setFocusOn] = useState(false)
+  const [focusing, setFocusing] = useState(false)
 
   const bgRef = useRef(null)
   const coverRef = useRef(null)
@@ -327,8 +329,9 @@ export default function CastingAnimation({ result, changingLines = [], onFinish 
       }
 
       /* --- 墨的浓度曲线 --- */
-      // 背景墨：全程翻涌，浓度始终低（不遮图案）
-      const bgInt = ph === 'reveal' || ph === 'done' ? 0.26 : 0.30
+      // 背景墨：全程翻涌。动画中 0.30；出结果页后降到 0.14 —— 结果页的文字压在水墨上，
+      // 浓度高会让小字读不清，也让顶部的卦象发灰
+      const bgInt = ph === 'reveal' || ph === 'done' ? 0.14 : 0.30
 
       // 覆盖墨（第一段）：从四周涌上来，**盖在图案之上**（1.7 倍强度 → 真正遮住）
       let coverMain = 0
@@ -361,6 +364,7 @@ export default function CastingAnimation({ result, changingLines = [], onFinish 
           coverFocus = 0
           f.active = false
           setFocusOn(true)
+          setFocusing(false)
         }
       }
 
@@ -393,12 +397,13 @@ export default function CastingAnimation({ result, changingLines = [], onFinish 
     if (f && f.active) return
     focusRef.current = { start: performance.now(), active: true }
     setFocusOn(false)
+    setFocusing(true)
   }
 
   const showHex = phase === 'reveal' || phase === 'done'
 
   return (
-    <div className="cast-root">
+    <div className={'cast-root' + (phase === 'done' ? ' is-result' : '')}>
       {/* 背景墨：一直翻涌旋转，营造动态感，但不遮图案 */}
       <canvas ref={bgRef} className="cast-canvas cast-bg" />
       {/* 覆盖墨：只在遮住图案时出现 */}
@@ -445,17 +450,16 @@ export default function CastingAnimation({ result, changingLines = [], onFinish 
         </g>
       </svg>
 
-      {/* 第二段的触发把手（动画完成后出现） */}
+      {/* 动画结束 → 出结果页（卦头、三层解读、两个交互键、边界声明） */}
       {phase === 'done' && (
-        <button type="button" className="cast-focus-btn" onClick={handleFocus}>
-          {changingLines.length > 0 ? '看这一爻' : '再看一遍'}
-        </button>
-      )}
-
-      {phase === 'done' && onFinish && (
-        <button type="button" className="cast-skip" onClick={onFinish}>
-          查看解读 →
-        </button>
+        <CastResult
+          result={result}
+          changingLines={changingLines}
+          onFocusLine={handleFocus}
+          focusing={focusing}
+          onEnterList={() => onEnterList && onEnterList(result.id)}
+          onEnterDetail={() => onEnterDetail && onEnterDetail(result.id)}
+        />
       )}
     </div>
   )

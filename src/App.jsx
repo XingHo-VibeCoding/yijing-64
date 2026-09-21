@@ -1,22 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import data from '../data/64卦.json'
+import yaoData from '../data/64卦-爻辞.json'
 import HexagramFigure from './HexagramFigure.jsx'
 import CastingAnimation from './CastingAnimation.jsx'
+import SourceTag from './SourceTag.jsx'
 
 const VOLUMES = [
   { key: '上经', range: '1–30' },
   { key: '下经', range: '31–64' },
 ]
-
-/** 来源标注：区分「经典原文」与「后人解读」（PRD 第 6 节 F5） */
-function SourceTag({ kind, note }) {
-  return (
-    <p className={`src src-${kind}`}>
-      <span className="src-kind">{kind === 'text' ? '《周易》原文' : '现代白话解读'}</span>
-      <span className="src-note">{note}</span>
-    </p>
-  )
-}
 
 /** 一键起卦：六爻各自随机（阳 / 阴各半），再按六爻查卦；变爻按传统概率取（每爻 1/4） */
 function castOnce() {
@@ -32,37 +24,61 @@ function castOnce() {
 export default function App() {
   const [currentId, setCurrentId] = useState(null)
   const [casting, setCasting] = useState(null)
+  /** 从起卦结果页跳回总表时，要定位并高亮的卦 */
+  const [highlightId, setHighlightId] = useState(null)
+
   const current = currentId === null ? null : data.items.find((h) => h.id === currentId)
 
+  /* 回到总表时，把刚起的卦滚到视野中间 */
+  useEffect(() => {
+    if (casting || currentId !== null || highlightId == null) return
+    const el = document.querySelector(`[data-hid="${highlightId}"]`)
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [casting, currentId, highlightId])
+
+  /* ---------- 起卦流程（动画 + 结果页） ---------- */
   if (casting) {
     const target = data.items.find((h) => h.id === casting.id)
     return (
       <CastingAnimation
         result={target}
         changingLines={casting.changing}
-        onFinish={() => {
+        onEnterList={(id) => {
           setCasting(null)
-          setCurrentId(target.id)
+          setHighlightId(id)
+        }}
+        onEnterDetail={(id) => {
+          setCasting(null)
+          setCurrentId(id)
         }}
       />
     )
   }
 
+  /* ---------- 单卦详情 ---------- */
   if (current) {
+    const yaos = yaoData.byId[String(current.id)] || []
+    const fortune = current.fortune || '平'
+    const basis = current.fortuneBasis || []
+
     return (
       <main className="page">
         <button type="button" className="back" onClick={() => setCurrentId(null)}>
-          ← 返回列表
+          ← 返回总表
         </button>
 
         <header className="detail-head">
           <div className="detail-symbol" aria-hidden="true">{current.symbol}</div>
           <div>
             <h1 className="detail-name">{current.name}</h1>
-            <p className="detail-meta">第 {current.id} 卦 · {current.volume}</p>
+            <p className="detail-meta">
+              第 {current.id} 卦 · {current.volume}
+              <span className={`fortune fortune-${fortune}`}>{fortune}</span>
+            </p>
           </div>
         </header>
 
+        {/* 卦象 */}
         <section className="block">
           <h2 className="block-title">卦象</h2>
           <div className="figure-wrap">
@@ -78,25 +94,69 @@ export default function App() {
               </div>
             </dl>
           </div>
-          <SourceTag kind="text" note="卦象与卦序依据通行本（王弼本）；卦符取自 Unicode U+4DC0–U+4DFF" />
+          <SourceTag kind="text" note="卦序与卦符依据通行本（王弼本）；卦符取自 Unicode U+4DC0–U+4DFF" />
         </section>
 
-        <section className="pending">
-          <h2 className="pending-title">待补内容</h2>
-          <ul>
-            <li>卦辞、象辞（原文 + 白话）</li>
-            <li>六条爻辞（原文 + 白话 + 小象）</li>
-            <li>卦名拼音</li>
-          </ul>
+        {/* 卦辞 / 象辞 */}
+        <section className="block">
+          <h2 className="block-title">卦辞 · 象辞</h2>
+          <div className="classic-block">
+            <span className="classic-label">卦辞</span>
+            <p className="classic">{current.judgment}</p>
+          </div>
+          <div className="classic-block">
+            <span className="classic-label">象辞</span>
+            <p className="classic">{current.image}</p>
+          </div>
           <p className="pending-note">
-            按 PRD 第 7.2 节，原文须以 ctext.org 王弼本逐条核对后录入，本步未做。
+            白话译文<b>暂无</b>。第三方白话有版权与准确性风险，本项目不搬运、不自撰——
+            这一栏宁可空着，也不放不可靠的东西。
           </p>
+          <SourceTag kind="text" note="取自通行本（王弼本），已逐条核对，一字未改" />
+        </section>
+
+        {/* 六爻爻辞 */}
+        <section className="block">
+          <h2 className="block-title">六爻爻辞</h2>
+          <ol className="yao-list">
+            {yaos.map((y) => (
+              <li className="yao" key={y.label}>
+                <span className="yao-label">{y.label}</span>
+                <div>
+                  <p className="classic">{y.text}</p>
+                  {y.xiang ? <p className="classic yao-xiang">象曰：{y.xiang}</p> : null}
+                </div>
+              </li>
+            ))}
+          </ol>
+          <SourceTag
+            kind="text"
+            note="爻辞取自通行本（王弼本）；384 条爻题阴阳已与卦象交叉验证，0 不一致"
+          />
+        </section>
+
+        {/* 吉凶平：本项目的判定，依据可追溯 */}
+        <section className="block">
+          <h2 className="block-title">吉 · 凶 · 平</h2>
+          <p className="fortune-line">
+            本卦判为 <b className={`fortune-text fortune-text-${fortune}`}>{fortune}</b>
+            {basis.length ? <>，依据是卦辞里的「{basis.join('」「')}」。</> : '。'}
+          </p>
+          <p className="fortune-note">
+            {fortune === '吉'
+              ? '吉卦提醒的是戒骄躁——顺境最容易松懈，这句吉不是许诺，是提醒。'
+              : fortune === '凶'
+                ? '凶卦讲的是处境，不是判决。运随时变，成事在人。'
+                : '谈不上吉也谈不上凶，它只是把这件事实话实说。'}
+          </p>
+          <SourceTag kind="ours" note="这是本项目按卦辞整体处境作出的判定，不作未来断言" />
         </section>
       </main>
     )
   }
 
-  const withFigure = data.items.length
+  /* ---------- 卦象爻辞总表 ---------- */
+  const total = data.items.length
 
   return (
     <main className="page">
@@ -123,7 +183,15 @@ export default function App() {
               .filter((h) => h.volume === key)
               .map((h) => (
                 <li key={h.id}>
-                  <button type="button" className="item" onClick={() => setCurrentId(h.id)}>
+                  <button
+                    type="button"
+                    className={'item' + (highlightId === h.id ? ' is-hit' : '')}
+                    data-hid={h.id}
+                    onClick={() => {
+                      setHighlightId(null)
+                      setCurrentId(h.id)
+                    }}
+                  >
                     <span className="item-id">{h.id}</span>
                     <span className="item-symbol" aria-hidden="true">{h.symbol}</span>
                     <span className="item-name">{h.name}</span>
@@ -135,7 +203,7 @@ export default function App() {
       ))}
 
       <footer className="foot">
-        共 {withFigure} 卦 · 每卦含六爻爻线与上下卦 · 数据来源：{data.meta.source}
+        共 {total} 卦 · 每卦含六爻爻线与上下卦 · 数据来源：{data.meta.source}
       </footer>
     </main>
   )

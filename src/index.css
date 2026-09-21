@@ -93,7 +93,7 @@ body {
 .trigrams dt { font-size: 12px; color: #8c959f; }
 .trigrams dd { margin: 2px 0 0; font-size: 17px; }
 
-/* ---------- 来源标注 ---------- */
+/* ---------- 来源标注（F5：原文 / 白话 / 本项目的理解 必须分层可见） ---------- */
 .src {
   margin: 14px 0 0; display: flex; gap: 10px; align-items: baseline;
   font-size: 12.5px; color: var(--ink-soft);
@@ -102,14 +102,72 @@ body {
   flex: none; padding: 1px 8px; border-radius: 999px;
   background: #e6f1fb; color: #0c447c; border: 1px solid #b5d4f4;
 }
+/* 原文用墨色；白话用蓝色；本项目的理解用朱色 —— 三种一眼可辨 */
+.src-text .src-kind { background: #f2f0eb; color: #33302b; border-color: #ddd7cc; }
+.src-ours .src-kind { background: #fbeae7; color: #8c2f21; border-color: #efc7bf; }
 
-/* ---------- 待补 ---------- */
-.pending { margin-top: 28px; }
-.pending-title { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
-.pending ul { margin: 0; padding-left: 1.3em; color: var(--ink-soft); font-size: 14px; }
+/* ---------- 经典原文 ---------- */
+.classic {
+  margin: 0;
+  font-family: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "SimSun-ExtB", "STSong", serif;
+  font-size: 19px; line-height: 1.8; color: #241f1b;
+}
+/* SimSun-ExtB 用于扩展区生僻字（徽纆 / 覆公餗 / 繻有衣袽），避免显示成方块 */
+
+.classic-block {
+  margin: 0 0 14px; padding: 14px 18px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid #b9b2a6; border-radius: 0 10px 10px 0;
+}
+.classic-label {
+  display: block; margin-bottom: 6px;
+  font-size: 11.5px; letter-spacing: .08em; color: #8c959f;
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+/* ---------- 六爻爻辞 ---------- */
+.yao-list { list-style: none; margin: 0; padding: 0; }
+.yao {
+  display: flex; gap: 14px; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  margin-bottom: 8px;
+}
+.yao-label {
+  flex: none; width: 3.4em; padding-top: 3px;
+  font-size: 13px; color: #6b6259; letter-spacing: .04em;
+}
+.yao-xiang { margin-top: 6px; font-size: 16px; color: #574f47; }
+
+/* ---------- 吉凶平 ---------- */
+.fortune {
+  display: inline-block; margin-left: 8px; padding: 0 9px;
+  font-size: 12px; border-radius: 999px; border: 1px solid currentColor;
+}
+.fortune-吉, .fortune-text-吉 { color: #9a3324; }
+.fortune-凶, .fortune-text-凶 { color: #3b3530; }
+.fortune-平, .fortune-text-平 { color: #7a7268; }
+.fortune-line { margin: 0; font-size: 15px; line-height: 1.9; }
+.fortune-note {
+  margin: 12px 0 0; padding: 12px 16px; font-size: 13.5px; line-height: 1.85;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  color: #4a4440;
+}
+
 .pending-note {
-  margin: 14px 0 0; padding: 10px 14px; font-size: 12.5px; color: #8a5a00;
+  margin: 14px 0 0; padding: 10px 14px; font-size: 12.5px; line-height: 1.8; color: #8a5a00;
   background: #faeeda; border: 1px solid #f0d9a8; border-radius: 8px;
+}
+
+/* ---------- 总表：从起卦结果页定位过来的那一卦 ---------- */
+.item.is-hit {
+  border-color: #9a3324;
+  background: #fbeae7;
+  box-shadow: 0 0 0 3px rgba(154, 51, 36, .12);
+  animation: hit-pulse 1.6s ease 2;
+}
+@keyframes hit-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(154, 51, 36, .12); }
+  50%      { box-shadow: 0 0 0 8px rgba(154, 51, 36, .04); }
 }
 
 .foot {

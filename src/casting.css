@@ -67,41 +67,163 @@
 
 .cast-figure { pointer-events: none; }
 
-/* ---------- 按钮 ---------- */
-.cast-skip,
-.cast-focus-btn {
+/* ============================================================
+   结果页（动画结束后）
+   舞台缩小上移，下半屏让给文字；水墨仍在其后翻涌
+   ============================================================ */
+
+.cast-root.is-result .cast-stage {
+  top: 22%;
+  width: min(36vmin, 200px);
+  height: min(36vmin, 200px);
+  transition:
+    top .9s cubic-bezier(.2, .8, .3, 1),
+    width .9s cubic-bezier(.2, .8, .3, 1),
+    height .9s cubic-bezier(.2, .8, .3, 1);
+}
+
+.cast-result {
   position: absolute;
-  left: 50%;
-  z-index: 4;
-  transform: translateX(-50%);
-  padding: 10px 26px;
+  left: 0;
+  right: 0;
+  top: 39%;
+  bottom: 0;
+  z-index: 5;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: 12px;
+  padding: 0 22px 52px;
+  /* 宣纸底衬：顶部透出墨与卦象，往下渐次压实，保证文字压在翻涌的水墨上也看得清 */
+  background: linear-gradient(
+    to bottom,
+    rgba(249, 246, 239, 0) 0,
+    rgba(249, 246, 239, .74) 64px,
+    rgba(249, 246, 239, .93) 150px,
+    rgba(249, 246, 239, .96) 100%
+  );
+  animation: cr-in .7s ease both;
+}
+@keyframes cr-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+.cr-inner { max-width: 620px; margin: 0 auto; }
+
+/* ── 卦头（卦象由身后的 SVG 大幅呈现，这里不重复放卦符） ── */
+.cr-head { text-align: center; margin-bottom: 16px; }
+.cr-name {
+  margin: 4px 0 2px;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-indent: .18em;
+}
+.cr-meta { margin: 0; font-size: 13px; color: #574f47; }
+.cr-fortune {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 9px;
   border-radius: 999px;
-  font-size: 15px;
+  font-size: 12px;
+  border: 1px solid currentColor;
+}
+.cr-f-吉 { color: #9a3324; }
+.cr-f-凶 { color: #3b3530; }
+.cr-f-平 { color: #7a7268; }
+.cr-trigrams { margin: 6px 0 0; font-size: 13px; color: #574f47; }
+
+/* ── 变爻 · 第二段动画入口 ── */
+.cr-focus { text-align: center; margin-bottom: 14px; }
+.cr-focus-btn {
+  padding: 8px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(27, 23, 20, .45);
+  background: rgba(253, 251, 246, .7);
+  color: #1b1714;
+  font-family: inherit;
+  font-size: 14px;
   letter-spacing: .06em;
   cursor: pointer;
-  font-family: inherit;
-  transition: background .25s ease, color .25s ease, border-color .25s ease;
+  transition: background .25s ease, border-color .25s ease, opacity .25s ease;
 }
+.cr-focus-btn:hover:not(:disabled) { background: rgba(253, 251, 246, .95); border-color: #1b1714; }
+.cr-focus-btn:disabled { opacity: .5; cursor: default; }
+.cr-focus-hint { display: block; margin-top: 7px; font-size: 12px; color: #6b6259; }
 
-/* 主按钮：查看解读 */
-.cast-skip {
-  bottom: max(9vh, 56px);
-  border: 1px solid #1b1714;
-  background: #1b1714;
-  color: #f5f2ec;
-}
-.cast-skip:hover { background: #332c26; border-color: #332c26; }
-
-/* 次按钮：看这一爻 */
-.cast-focus-btn {
-  bottom: calc(max(9vh, 56px) + 56px);
-  border: 1px solid rgba(27,23,20,.45);
-  background: rgba(253,251,246,.72);
+/* ── 两个交互键 ── */
+.cr-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.cr-btn {
+  padding: 11px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(27, 23, 20, .35);
+  background: rgba(253, 251, 246, .72);
   color: #1b1714;
-  backdrop-filter: blur(2px);
+  font-family: inherit;
+  font-size: 15px;
+  letter-spacing: .05em;
+  cursor: pointer;
+  transition: background .25s ease, border-color .25s ease, color .25s ease;
 }
-.cast-focus-btn:hover { background: rgba(253,251,246,.95); border-color: #1b1714; }
+.cr-btn:hover { background: #fdfbf6; border-color: #1b1714; }
+.cr-btn-primary { background: #1b1714; border-color: #1b1714; color: #f5f2ec; }
+.cr-btn-primary:hover { background: #332c26; border-color: #332c26; color: #f5f2ec; }
+.cr-btn-wide { display: block; width: 100%; margin-top: 20px; }
 
-@media (max-width: 520px) {
-  .cast-skip, .cast-focus-btn { font-size: 14px; padding: 9px 20px; }
+/* ── 三层解读 ── */
+.cr-reading { margin-top: 22px; animation: cr-in .5s ease both; }
+.cr-layer { padding: 18px 0; border-top: 1px solid rgba(27, 23, 20, .12); }
+.cr-layer:last-of-type { border-bottom: 1px solid rgba(27, 23, 20, .12); }
+.cr-layer-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cr-layer-no {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(27, 23, 20, .07);
+  color: #6b6259;
+}
+.cr-layer-body { margin: 0; font-size: 15px; line-height: 1.9; color: #2a2521; }
+.cr-talk { font-size: 16px; }
+
+/* 原文块：左竖线 + 衬线字，视觉上与解读分开 */
+.cr-text { margin: 0 0 12px; padding-left: 12px; border-left: 2px solid rgba(27, 23, 20, .22); }
+.cr-text-hi { border-left-color: #9a3324; background: rgba(154, 51, 36, .05); padding: 8px 12px; border-radius: 0 6px 6px 0; }
+.cr-text-label { display: block; font-size: 11.5px; color: #8a8177; letter-spacing: .06em; margin-bottom: 3px; }
+.cr-classic {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.75;
+  color: #241f1b;
+  font-family: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "SimSun-ExtB", "STSong", serif;
+  /* 最后两个字体用于扩展区生僻字（如 徽纆 / 覆公餗 / 繻有衣袽），避免显示成方块 */
+}
+.cr-sub { margin-top: 4px; font-size: 15px; color: #574f47; }
+.cr-none, .cr-pending, .cr-basis { margin: 10px 0 0; font-size: 13px; line-height: 1.8; color: #7a7268; }
+
+/* ── 边界声明 ── */
+.cr-boundary {
+  margin-top: 26px;
+  padding: 18px 20px;
+  border: 1px solid rgba(27, 23, 20, .14);
+  border-radius: 10px;
+  background: rgba(253, 251, 246, .6);
+  text-align: center;
+}
+.cr-boundary-main { margin: 0 0 8px; font-size: 17px; letter-spacing: .14em; text-indent: .14em; }
+.cr-boundary-sub { margin: 0; font-size: 13px; line-height: 1.85; color: #6b6259; }
+
+@media (max-width: 560px) {
+  .cr-name { font-size: 26px; }
+  .cr-layer-body { font-size: 14.5px; }
+  .cr-classic { font-size: 16px; }
+  .cast-root.is-result .cast-stage { top: 20%; width: min(32vmin, 168px); height: min(32vmin, 168px); }
+  .cast-result { top: 36%; padding: 0 16px 44px; }
 }
