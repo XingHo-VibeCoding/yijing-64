@@ -112,6 +112,21 @@ export default function App() {
     go(`#/h/${id}`)
   }
 
+  /**
+   * F1 交互：列表里用 ↑ / ↓ 在卦之间移动焦点，回车即进入（`<button>` 原生支持 Enter / Space）。
+   * 到头就停住、不绕回 —— 绕回会让人失去「我在第几个」的位置感。
+   */
+  const onItemKeyDown = (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    const items = Array.from(document.querySelectorAll('.item'))
+    const i = items.indexOf(e.currentTarget)
+    if (i < 0) return
+    const target = e.key === 'ArrowDown' ? items[i + 1] : items[i - 1]
+    if (!target) return
+    e.preventDefault()
+    target.focus()
+  }
+
   /* ---------- 起卦流程（动画 + 结果页） ---------- */
   if (casting) {
     const target = data.items.find((h) => h.id === casting.id)
@@ -200,7 +215,10 @@ export default function App() {
         <header className="detail-head">
           <div className="detail-symbol" aria-hidden="true">{current.symbol}</div>
           <div>
-            <h1 className="detail-name">{current.name}</h1>
+            <h1 className="detail-name">
+              {current.name}
+              {current.pinyin ? <span className="detail-pinyin">{current.pinyin}</span> : null}
+            </h1>
             <p className="detail-meta">
               第 {current.id} 卦 · {current.volume}
               <span className={`fortune fortune-${fortune}`}>{fortune}</span>
@@ -355,6 +373,7 @@ export default function App() {
                     type="button"
                     className={'item' + (highlightId === h.id ? ' is-hit' : '')}
                     data-hid={h.id}
+                    onKeyDown={onItemKeyDown}
                     onClick={() => {
                       setHighlightId(null)
                       openDetail(h.id, 'list')

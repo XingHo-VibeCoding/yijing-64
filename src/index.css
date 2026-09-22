@@ -80,6 +80,11 @@ body {
 }
 .detail-symbol { font-size: 62px; line-height: 1; }
 .detail-name { margin: 0; font-size: 28px; font-weight: 600; }
+/* 拼音（PRD F2 卦头）：小一号、跟着卦名，不抢主体 */
+.detail-pinyin {
+  margin-left: 10px; font-size: 15px; font-weight: 400;
+  color: var(--ink-soft); letter-spacing: .02em;
+}
 .detail-meta { margin: 4px 0 0; font-size: 13px; color: var(--ink-soft); }
 
 .block { margin-top: 28px; }
