@@ -221,7 +221,19 @@ body {
 .my-records-n { font-size: 11.5px; color: #8c959f; }
 
 /* ---------- 详情页顶部动作条 ---------- */
-.detail-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.detail-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+}
+/* 翻页（PRD F2 元素 6）：第 1 卦与第 64 卦两侧各有一个按钮置灰 */
+.pager { display: flex; gap: 8px; }
+.pager-btn {
+  padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
+  color: var(--ink-soft); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px;
+  transition: border-color .15s, color .15s;
+}
+.pager-btn:hover:not(:disabled) { border-color: #85b7eb; color: var(--ink); }
+.pager-btn:disabled { opacity: .38; cursor: default; }
 .fav-btn {
   padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer;
   color: var(--ink-soft); background: var(--surface);

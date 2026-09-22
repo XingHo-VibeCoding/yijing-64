@@ -13,6 +13,29 @@ const VOLUMES = [
 ]
 
 /**
+ * 极简 hash 路由（不引第三方路由库）。
+ *   #/h/15     → 第 15 卦详情页（**可直接打开、可分享**，PRD F2 边界条件）
+ *   #/records  → 过往起卦记录
+ *   空 / 其它  → 总表
+ * 地址栏是状态的唯一来源：pushState 只有这两处，其余全靠 hashchange 回读。
+ */
+function parseHash() {
+  const raw = window.location.hash.replace(/^#\/?/, '')
+  if (raw.startsWith('h/')) {
+    const id = Number.parseInt(raw.slice(2), 10)
+    if (Number.isInteger(id) && id >= 1 && id <= 64) return { kind: 'detail', id }
+  }
+  if (raw === 'records') return { kind: 'records' }
+  return { kind: 'list' }
+}
+
+/** 改 hash；值没变就不动（避免无意义的历史记录堆积），变化会触发 hashchange */
+function go(hash) {
+  if (window.location.hash === hash) return
+  window.location.hash = hash
+}
+
+/**
  * 「这一卦至少有一个变爻」的概率。
  * 传统取法里每爻有 1/4 是变爻（老阳 3/16 + 老阴 1/16），六爻独立 →
  * 至少一个变爻的概率 = 1 − (3/4)^6 ≈ 0.822。
@@ -55,6 +78,23 @@ export default function App() {
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [casting, currentId, view, highlightId])
 
+  /* ---------- 地址栏 → 状态（直接打开 /#/h/15 也能进详情页） ---------- */
+  useEffect(() => {
+    const sync = () => {
+      const r = parseHash()
+      if (r.kind === 'detail') {
+        setCurrentId(r.id)
+        setView('list')
+      } else {
+        setCurrentId(null)
+        setView(r.kind === 'records' ? 'records' : 'list')
+      }
+    }
+    sync()
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+
   /* ---------- 起卦：一键出结果，并判定是否入档 ---------- */
   const startCast = () => {
     const c = castOnce()
@@ -69,6 +109,7 @@ export default function App() {
     setBackTo(from)
     setView('list')
     setCurrentId(id)
+    go(`#/h/${id}`)
   }
 
   /* ---------- 起卦流程（动画 + 结果页） ---------- */
@@ -91,6 +132,7 @@ export default function App() {
           setCasting(null)
           setView('list')
           setHighlightId(id)
+          go('#/')
         }}
         onEnterDetail={(id) => {
           setCasting(null)
@@ -106,6 +148,9 @@ export default function App() {
     const fortune = current.fortune || '平'
     const basis = current.fortuneBasis || []
     const fav = favorites.some((f) => f.hexagramId === current.id)
+    // 翻页（PRD F2 元素 6）：首尾两卦要正确处理 —— 第 1 卦没有上一卦、第 64 卦没有下一卦
+    const prevHex = data.items.find((h) => h.id === current.id - 1) || null
+    const nextHex = data.items.find((h) => h.id === current.id + 1) || null
 
     return (
       <main className="page">
@@ -116,10 +161,30 @@ export default function App() {
             onClick={() => {
               setCurrentId(null)
               setView(backTo)
+              go(backTo === 'records' ? '#/records' : '#/')
             }}
           >
             ← {backTo === 'records' ? '返回记录' : '返回总表'}
           </button>
+
+          <nav className="pager" aria-label="翻页">
+            <button
+              type="button"
+              className="pager-btn"
+              disabled={!prevHex}
+              onClick={() => prevHex && openDetail(prevHex.id, backTo)}
+            >
+              ‹ 上一卦{prevHex ? ` · ${prevHex.name}` : ''}
+            </button>
+            <button
+              type="button"
+              className="pager-btn"
+              disabled={!nextHex}
+              onClick={() => nextHex && openDetail(nextHex.id, backTo)}
+            >
+              {nextHex ? `${nextHex.name} · ` : ''}下一卦 ›
+            </button>
+          </nav>
           <button
             type="button"
             className={'fav-btn' + (fav ? ' is-on' : '')}
@@ -231,7 +296,10 @@ export default function App() {
           store.toggleFavorite(id)
           bump()
         }}
-        onBack={() => setView('list')}
+        onBack={() => {
+          setView('list')
+          go('#/')
+        }}
       />
     )
   }
@@ -252,7 +320,14 @@ export default function App() {
         </button>
 
         {/* 我的记录入口（PRD F1：次级按钮） */}
-        <button type="button" className="my-records" onClick={() => setView('records')}>
+        <button
+          type="button"
+          className="my-records"
+          onClick={() => {
+            setView('records')
+            go('#/records')
+          }}
+        >
           我的记录
           {records.length + favorites.length > 0 ? (
             <span className="my-records-n">
