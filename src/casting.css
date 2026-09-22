@@ -150,7 +150,13 @@
 }
 .cr-focus-btn:hover:not(:disabled) { background: rgba(253, 251, 246, .95); border-color: #1b1714; }
 .cr-focus-btn:disabled { opacity: .5; cursor: default; }
-.cr-focus-hint { display: block; margin-top: 7px; font-size: 12px; color: #6b6259; }
+/* 第二段入口的提示：四个字，压在①水墨覆盖层之上②宣纸底衬之上 —— 两处都要扛得住，
+   所以字重提到 500、颜色加深到 #4a4440、加一点字距让它像一句题签而不是脚注小字 */
+.cr-focus-hint {
+  display: block; margin-top: 7px;
+  font-size: 13px; font-weight: 500; letter-spacing: .1em;
+  color: #4a4440;
+}
 
 /* ── 两个交互键 ── */
 .cr-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
