@@ -2,7 +2,7 @@
  "meta": {
   "total": 64,
   "source": "卦辞与象辞取自 GitHub sunls2/zhouyi（通行本转录），已与王弼本逐条核对；fortune 按卦辞整体处境判定，非逐字计数",
-  "pending": ["pinyin", "judgmentPlain", "imagePlain", "lineTexts"],
+  "pending": ["pinyin", "lineTexts"],
   "verified": {
    "lines": "上下卦表经 6 组自动校验 + 41 条外部全名（百度百科）逐条比对，0 矛盾",
    "symbolOrder": "卦符码点连续 U+4DC0–U+4DFF，与 Unicode 标准王弼本卦序一致",

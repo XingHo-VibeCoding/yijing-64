@@ -235,7 +235,7 @@
   /* 最后两个字体用于扩展区生僻字（如 徽纆 / 覆公餗 / 繻有衣袽），避免显示成方块 */
 }
 .cr-sub { margin-top: 4px; font-size: 15px; color: #574f47; }
-.cr-none, .cr-pending, .cr-basis { margin: 10px 0 0; font-size: 13px; line-height: 1.8; color: #7a7268; }
+.cr-none, .cr-basis { margin: 10px 0 0; font-size: 13px; line-height: 1.8; color: #7a7268; }
 
 /* ── 边界声明 ── */
 .cr-boundary {

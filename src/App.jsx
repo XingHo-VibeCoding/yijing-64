@@ -173,10 +173,6 @@ export default function App() {
             <span className="classic-label">象辞</span>
             <p className="classic">{current.image}</p>
           </div>
-          <p className="pending-note">
-            白话译文<b>暂无</b>。第三方白话有版权与准确性风险，本项目不搬运、不自撰——
-            这一栏宁可空着，也不放不可靠的东西。
-          </p>
           <SourceTag kind="text" note="取自通行本（王弼本），已逐条核对，一字未改" />
         </section>
 

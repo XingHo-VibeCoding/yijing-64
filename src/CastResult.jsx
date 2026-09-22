@@ -144,7 +144,7 @@ export default function CastResult({
                 下卦为{result.lowerTrigram}，取象「{result.lowerNature}」。
                 两卦相叠，画面就是「<b>{structurePhrase(result.upperNature, result.lowerNature)}</b>」。
               </p>
-              <SourceTag kind="plain" note="本层由上下卦的取象推出，只描述画面，不作吉凶判断" />
+              <SourceTag kind="ours" note="本层由上下卦的取象推出，只描述画面，不作吉凶判断" />
             </section>
 
             {/* 第二层 · 卦辞爻辞怎么讲 */}
@@ -178,10 +178,6 @@ export default function CastResult({
                 kind="text"
                 note="卦辞与爻辞取自通行本（王弼本），已逐条核对，一字未改"
               />
-              <p className="cr-pending">
-                白话译文<b>暂无</b>：第三方白话有版权与准确性风险，本项目不搬运、不自撰——
-                这一栏宁可空着，也不放不可靠的东西。
-              </p>
             </section>
 
             {/* 第三层 · 想跟你说的话 */}
