@@ -83,44 +83,49 @@ function makeDotTexture(size = 128) {
 }
 
 function makeBlobs(w, h) {
-  const cx = w / 2
-  const cy = h / 2
   const R = Math.hypot(w, h) / 2
   const out = []
-  for (let i = 0; i < 36; i++) {
-    // 指数 > 1 → 偏向中心（铺满画面，不再只在外围成环）
-    const rr = Math.pow(Math.random(), 1.15) * R * 1.05
-    const a0 = Math.random() * Math.PI * 2
-    // 团内点云：两次随机相乘 → 中心密、边缘疏
-    const n = 13 + Math.floor(Math.random() * 9)
+  for (let i = 0; i < 78; i++) {
+    // 三档分布：**外围墨云带最密**（「黑云翻墨」主要发生在这里）→ 中环 → 近中心（稀而淡，护住图案）
+    // 指数 e：rr = u^e · R。e≈0.5 = 面积均匀；**e < 0.5 才是真的偏外围**（之前用 0.58 反而偏稀）
+    const z = Math.random()
+    const exp = z < 0.56 ? 0.44 : z < 0.83 ? 0.95 : 2.10
+    const rr = Math.pow(Math.random(), exp) * R * 0.98   // 收在可视圆内，别把墨甩到画面外
+    const far = rr / (R * 0.98)                          // 0 = 正中，1 = 画面边缘
+    // 浓度：中心 0.94 → 边缘 0.42（原来边缘 0.10，再乘遮罩就什么都看不见了）
+    const base = 0.94 - far * 0.52
+    const peripheral = far > 0.52
+    // 团内点云：两次随机相乘 → 中心密、边缘疏。外围的云要多带点、带大点，才像「云」而不是「雾」
+    const n = (peripheral ? 22 : 12) + Math.floor(Math.random() * (peripheral ? 12 : 6))
     const dots = []
     for (let j = 0; j < n; j++) {
       const ta = Math.random() * Math.PI * 2
-      const td = (Math.random() * 0.5 + Math.random() * 0.5) * 0.92
+      const td = (Math.random() * 0.5 + Math.random() * 0.5) * 0.95
       dots.push({
         dx: Math.cos(ta) * td,
-        dy: Math.sin(ta) * td * 0.78,
-        s: 0.30 + Math.random() * 0.55,
-        a: 0.16 + Math.random() * 0.42,
+        dy: Math.sin(ta) * td * 0.80,
+        s: 0.26 + Math.random() * (peripheral ? 0.86 : 0.48),
+        a: (peripheral ? 0.17 : 0.14) + Math.random() * (peripheral ? 0.50 : 0.44),
       })
     }
     out.push({
-      ox: cx + Math.cos(a0) * rr,
-      oy: cy + Math.sin(a0) * rr,
-      rad: (0.075 + Math.random() * 0.135) * R,
-      // 浓度梯度：中心 0.95 → 周边 0.10
-      base: 0.10 + Math.max(0, 1 - rr / (R * 1.05)) * 0.85,
-      dots,
-      sx: 0.00020 + Math.random() * 0.00052,
-      sy: 0.00017 + Math.random() * 0.00044,
-      px: Math.random() * Math.PI * 2,
-      py: Math.random() * Math.PI * 2,
-      rx: (0.04 + Math.random() * 0.12) * R,
-      ry: (0.035 + Math.random() * 0.11) * R,
-      rp: 0.0005 + Math.random() * 0.0012,
-      pr: Math.random() * Math.PI * 2,
-      rotS: (Math.random() - 0.5) * 0.0007,
+      rr,
+      a0: Math.random() * Math.PI * 2,
+      // 角速度：内圈快、外圈慢，约三成反向 —— 交错翻涌，不再是整体匀速转
+      w: (0.00034 + Math.random() * 0.00072) * (Math.random() < 0.30 ? -1 : 1) * (1 - far * 0.42),
+      surgeAmp: 0.05 + Math.random() * 0.10,   // 径向「翻」：云块一涨一落
+      surgeSp: 0.00030 + Math.random() * 0.00062,
+      surgePh: Math.random() * Math.PI * 2,
+      wobAmp: 0.06 + Math.random() * 0.13,     // 切向游移（弧度）：云块在空白处游走
+      wobSp: 0.00034 + Math.random() * 0.00072,
+      wobPh: Math.random() * Math.PI * 2,
+      rad: (peripheral ? 0.10 + Math.random() * 0.16 : 0.070 + Math.random() * 0.130) * R,
+      rotS: (Math.random() - 0.5) * 0.0018,    // 自转（卷）
       spin: Math.random() * Math.PI * 2,
+      bp: 0.00060 + Math.random() * 0.00090,   // 体量呼吸
+      bph: Math.random() * Math.PI * 2,
+      base,
+      dots,
     })
   }
   return out
@@ -132,20 +137,16 @@ function drawInk(ctx, w, h, blobs, dot, t, intensity, converge, clear = true) {
 
   const cx = w / 2
   const cy = h / 2
-  const gRot = t * 0.00006           // 整体翻涌旋转
-  const cosG = Math.cos(gRot)
-  const sinG = Math.sin(gRot)
+  const kConv = 1 - converge * 0.5
 
   for (const b of blobs) {
-    const dx = b.ox - cx
-    const dy = b.oy - cy
-    const rx0 = dx * cosG - dy * sinG
-    const ry0 = dx * sinG + dy * cosG
-    const k = 1 - converge * 0.5
-    const bx = cx + rx0 * k + Math.sin(t * b.sx + b.px) * b.rx
-    const by = cy + ry0 * k + Math.cos(t * b.sy + b.py) * b.ry
-    const sc = (1 + Math.sin(t * b.rp + b.pr) * 0.20) * (1 + converge * 0.55)
-    const spin = b.spin + gRot * 0.9 + t * b.rotS
+    // 极坐标演算：角速度各团不同（内快外慢、少数反向）→ 交错翻涌
+    const rr = b.rr * (1 + Math.sin(t * b.surgeSp + b.surgePh) * b.surgeAmp) * kConv
+    const ang = b.a0 + t * b.w + Math.sin(t * b.wobSp + b.wobPh) * b.wobAmp
+    const bx = cx + Math.cos(ang) * rr
+    const by = cy + Math.sin(ang) * rr * 0.96
+    const sc = (1 + Math.sin(t * b.bp + b.bph) * 0.24) * (1 + converge * 0.55)
+    const spin = b.spin + t * b.rotS
     const cs = Math.cos(spin)
     const sn = Math.sin(spin)
     const base = b.base * intensity
@@ -160,13 +161,13 @@ function drawInk(ctx, w, h, blobs, dot, t, intensity, converge, clear = true) {
   }
   ctx.globalAlpha = 1
 
-  // 全局浓度遮罩：中心浓、周边淡
+  // 全局浓度遮罩：中心仍最浓，但**外缘不再压到 0.10** —— 周边要留住能翻涌的墨
   ctx.globalCompositeOperation = 'destination-in'
   const gm = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.58)
   gm.addColorStop(0, 'rgba(0,0,0,1)')
-  gm.addColorStop(0.42, 'rgba(0,0,0,0.70)')
-  gm.addColorStop(0.75, 'rgba(0,0,0,0.30)')
-  gm.addColorStop(1, 'rgba(0,0,0,0.10)')
+  gm.addColorStop(0.40, 'rgba(0,0,0,0.86)')
+  gm.addColorStop(0.68, 'rgba(0,0,0,0.70)')
+  gm.addColorStop(1, 'rgba(0,0,0,0.52)')
   ctx.fillStyle = gm
   ctx.fillRect(0, 0, w, h)
   ctx.globalCompositeOperation = 'source-over'
