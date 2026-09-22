@@ -56,7 +56,28 @@
 >
 > 技术路线的完整比较、数据流图、错误处理与迁移注意事项见 [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md)。
 
-## 产品定位与边界（对齐 PRD v1.3）
+## 本地运行
+
+```bash
+npm install          # 首次
+npm run dev          # 开发服务器 → http://localhost:5173
+npm run build        # 构建 → dist/（纯静态，可直接托管）
+npm run preview      # 预览构建结果
+```
+
+> **本机注意（2026-09-22 实测）**：这台机器的执行沙箱**不允许删除已存在的文件**，而 `vite` 启动时会先
+> 清空 `node_modules/.vite/deps` → 直接跑 `npm run dev` 会报
+> `[safe-delete] 操作失败 ... Error during a 'trash' operation`。
+> 绕过办法是**换一个缓存目录**（用一份不进仓库的临时配置）：
+>
+> ```bash
+> npx vite --config .workbuddy/vite.dev7.config.mjs
+> ```
+>
+> 同理 `npm run build` **第二次会失败**（要清 `dist/`），验证构建改用：
+> `npx vite build --outDir .workbuddy/dist-checkN --emptyOutDir`。
+
+## 产品定位与边界（对齐 PRD v1.4）
 
 ### 主打功能
 
@@ -104,6 +125,7 @@
 | Day 6 | **新建 `AGENTS.md` 规则文件**（Day 1 基线 + R1–R4 + 检查项） | 已完成 |
 | Day 6 | **平台能力复核**：地域与计费查清，`TECH_DESIGN` 升 v2.4（订正一处错误估算） | 已完成 |
 | Day 6 | **PRD v1.4：砍掉「白话译文」整层**（字段 / 界面 / 来源标注），`TECH_DESIGN` 同步 v2.5 | 已完成 |
+| Day 7 | **MVP 本地跑通 + 运行说明存档**（新增「本地运行」段；本地服务实测 HTTP 200） | 已完成 |
 | 待做 | **G8 白话层清理**（代码与数据里去白话，见 `TECH_DESIGN` §5.3） | 待开始 |
 | 后续 | 卦名拼音 | 待开始 |
 | 后续 | 按卦序逐卦补充个人解读 | 待开始 |
