@@ -288,6 +288,10 @@ export default function App() {
                     <span className="item-id">{h.id}</span>
                     <span className="item-symbol" aria-hidden="true">{h.symbol}</span>
                     <span className="item-name">{h.name}</span>
+                    <span className="item-trigrams">
+                      上{h.upperTrigram}（{h.upperNature}）· 下{h.lowerTrigram}（{h.lowerNature}）
+                    </span>
+                    <span className="item-judgment">{h.judgment}</span>
                   </button>
                 </li>
               ))}
