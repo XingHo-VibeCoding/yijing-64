@@ -103,7 +103,7 @@ export default function CastResult({
             >
               {focusing ? '墨正翻涌…' : `看这一爻 · ${changingYaos[0].yao.label}`}
             </button>
-            <span className="cr-focus-hint">其余各爻会淡下去，只留这一爻给你看</span>
+            <span className="cr-focus-hint">卦起.见爻</span>
           </div>
         )}
 
