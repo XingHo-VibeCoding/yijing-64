@@ -27,10 +27,12 @@ function yaoLabels(hex, positions) {
  *
  * 记录**不可事后编辑** —— 改写它就失去了回看的意义（PRD F8）。
  */
-export default function Records({ records, favorites, onOpen, onClear, onToggleFav, onBack }) {
+export default function Records({ records, favorites, quizRounds = 0, onOpen, onClear, onToggleFav, onBack }) {
   const [tab, setTab] = useState('records')
   const [confirming, setConfirming] = useState(false)
-  const empty = records.length === 0 && favorites.length === 0
+  // ⚠️ 测验进度（F3）也算「有记录」—— 否则只测过一轮、还没起过卦时，
+  //    这个页面会显示成空的，「清空我的记录」按钮就不出现，进度再也清不掉
+  const empty = records.length === 0 && favorites.length === 0 && quizRounds === 0
 
   return (
     <main className="page">
@@ -154,7 +156,7 @@ export default function Records({ records, favorites, onOpen, onClear, onToggleF
           {confirming ? (
             <div className="rec-confirm">
               <p className="rec-confirm-text">
-                确定清空全部记录与收藏吗？<b>不可恢复。</b>
+                确定清空全部记录、收藏与测验成绩吗？<b>不可恢复。</b>
               </p>
               <div className="rec-confirm-row">
                 <button

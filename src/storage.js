@@ -92,11 +92,70 @@ export function toggleFavorite(hexagramId) {
   return true
 }
 
+/**
+ * F3 记忆测验的进度 —— 本期**唯一的「写入」功能**（PRD F3）
+ *
+ * 每轮存一条流水：{ date, score, total, answeredIds, wrongIds }
+ * 与起卦记录同一条红线：**只存卦序号与数字，不存精确时刻、不存任何身份信息**。
+ * 错题本以「最后一次答到它」的结果为准 —— 答对过一次就移出。
+ */
+const K_QUIZ = 'yijing.quiz.v1'
+
+const normIds = (arr) =>
+  Array.from(new Set((arr || []).filter((n) => Number.isInteger(n) && n >= 1 && n <= 64))).sort(
+    (a, b) => a - b
+  )
+
+/** 每轮成绩：按日期倒序 */
+export function loadQuizRounds() {
+  return read(K_QUIZ, []).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
+export function saveQuizRound({ score, total, answeredIds, wrongIds }) {
+  const list = read(K_QUIZ, [])
+  list.push({
+    date: todayKey(),
+    score,
+    total,
+    answeredIds: normIds(answeredIds),
+    wrongIds: normIds(wrongIds),
+  })
+  write(K_QUIZ, list)
+}
+
+/** 累计：轮数 / 答题数 / 正确数 / 正确率 / 单轮最好成绩 */
+export function quizSummary() {
+  const rounds = loadQuizRounds()
+  const answered = rounds.reduce((s, r) => s + (r.total || 0), 0)
+  const correct = rounds.reduce((s, r) => s + (r.score || 0), 0)
+  const best = rounds.reduce((m, r) => Math.max(m, r.score || 0), 0)
+  return {
+    rounds: rounds.length,
+    answered,
+    correct,
+    accuracy: answered ? correct / answered : 0,
+    best,
+  }
+}
+
+/** 错题本：卦序号数组（答对过就移出） */
+export function quizWrongBook() {
+  const latest = new Map()
+  for (const r of [...loadQuizRounds()].reverse()) {
+    for (const id of r.answeredIds || []) latest.set(id, (r.wrongIds || []).includes(id))
+  }
+  return [...latest.entries()]
+    .filter(([, wrong]) => wrong)
+    .map(([id]) => id)
+    .sort((a, b) => a - b)
+}
+
 /** 「清空我的记录」：记录与收藏一起清（PRD §6 F8） */
 export function clearAll() {
   try {
     window.localStorage.removeItem(K_RECORDS)
     window.localStorage.removeItem(K_FAVORITES)
+    window.localStorage.removeItem(K_QUIZ)
   } catch {
     /* 静默 */
   }

@@ -4,6 +4,7 @@ import yaoData from '../data/64卦-爻辞.json'
 import HexagramFigure from './HexagramFigure.jsx'
 import CastingAnimation from './CastingAnimation.jsx'
 import Records from './Records.jsx'
+import Quiz from './Quiz.jsx'
 import SourceTag from './SourceTag.jsx'
 import * as store from './storage.js'
 
@@ -15,6 +16,7 @@ const VOLUMES = [
 /**
  * 极简 hash 路由（不引第三方路由库）。
  *   #/h/15     → 第 15 卦详情页（**可直接打开、可分享**，PRD F2 边界条件）
+ *   #/quiz     → F3 记忆测验
  *   #/records  → 过往起卦记录
  *   空 / 其它  → 总表
  * 地址栏是状态的唯一来源：pushState 只有这两处，其余全靠 hashchange 回读。
@@ -25,6 +27,7 @@ function parseHash() {
     const id = Number.parseInt(raw.slice(2), 10)
     if (Number.isInteger(id) && id >= 1 && id <= 64) return { kind: 'detail', id }
   }
+  if (raw === 'quiz') return { kind: 'quiz' }
   if (raw === 'records') return { kind: 'records' }
   return { kind: 'list' }
 }
@@ -69,6 +72,7 @@ export default function App() {
 
   const records = store.loadRecords()
   const favorites = store.loadFavorites()
+  const quizSum = store.quizSummary()
   const current = currentId === null ? null : data.items.find((h) => h.id === currentId)
 
   /* 回到总表时，把刚起的卦滚到视野中间 */
@@ -87,7 +91,7 @@ export default function App() {
         setView('list')
       } else {
         setCurrentId(null)
-        setView(r.kind === 'records' ? 'records' : 'list')
+        setView(r.kind === 'records' ? 'records' : r.kind === 'quiz' ? 'quiz' : 'list')
       }
     }
     sync()
@@ -299,12 +303,26 @@ export default function App() {
     )
   }
 
+  /* ---------- F3 记忆测验 ---------- */
+  if (view === 'quiz') {
+    return (
+      <Quiz
+        onOpenDetail={(id) => openDetail(id, 'list')}
+        onBack={() => {
+          setView('list')
+          go('#/')
+        }}
+      />
+    )
+  }
+
   /* ---------- F8 过往起卦记录 ---------- */
   if (view === 'records') {
     return (
       <Records
         records={records}
         favorites={favorites}
+        quizRounds={quizSum.rounds}
         onOpen={(id) => openDetail(id, 'records')}
         onClear={() => {
           store.clearAll()
@@ -353,6 +371,24 @@ export default function App() {
             </span>
           ) : (
             <span className="my-records-n">每天第一卦会自动记在这里</span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className="my-records"
+          onClick={() => {
+            setView('quiz')
+            go('#/quiz')
+          }}
+        >
+          测一测
+          {quizSum.answered > 0 ? (
+            <span className="my-records-n">
+              {quizSum.rounds} 轮 · 正确率 {Math.round(quizSum.accuracy * 100)}% · 最好一次 {quizSum.best} 题
+            </span>
+          ) : (
+            <span className="my-records-n">看卦象选卦名 · 一轮 20 题</span>
           )}
         </button>
 

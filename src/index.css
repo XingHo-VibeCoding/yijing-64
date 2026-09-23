@@ -98,6 +98,12 @@ body {
 
 /* ---------- 卦象图 ---------- */
 .figure { display: flex; flex-direction: column; gap: 7px; }
+/* 测验题面的大号：线条更长更粗；且不显示爻题（见 HexagramFigure 的 labels） */
+.figure-lg { gap: 12px; }
+.figure-lg .bar { height: 16px; border-radius: 3px; }
+.figure-lg .bar-whole { width: 216px; }
+.figure-lg .bar-half { width: 101px; }
+.figure-lg .figure-line { gap: 14px; }
 .figure-row { display: flex; align-items: center; gap: 12px; }
 .figure-label {
   width: 2.8em; text-align: right; font-size: 12px; color: #8c959f;
@@ -330,3 +336,76 @@ body {
 }
 .rec-confirm-text { margin: 0 0 12px; font-size: 14px; color: #8a1c12; }
 .rec-confirm-row { display: flex; gap: 10px; }
+
+/* ============================================================
+   F3 · 记忆测验（看卦象选卦名）
+   ============================================================ */
+.q-bar {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; margin-bottom: 18px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  font-size: 13px; color: var(--ink-soft);
+}
+.q-bar b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.q-face {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  padding: 30px 24px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 14px;
+}
+.q-face-hint { margin: 0; font-size: 14px; color: var(--ink-soft); letter-spacing: .04em; }
+
+.q-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+.q-opt {
+  padding: 18px 10px; font: inherit; font-size: 22px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  cursor: pointer; transition: border-color .12s, background .12s;
+}
+.q-opt:hover:not(:disabled) { border-color: #85b7eb; background: #eef6ff; }
+.q-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.q-opt:disabled { cursor: default; }
+/* 答后：正确项描朱、错选描灰 —— 颜色之外还有文字说明，不只靠颜色传达 */
+.q-opt.is-answer { border-color: #9a3324; background: #fbeae7; color: #8c2f21; }
+.q-opt.is-chosen-wrong { border-color: #b4b2a9; background: #f1efe8; color: #6b6259; text-decoration: line-through; }
+
+.q-feedback {
+  margin-top: 16px; padding: 14px 18px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.q-feedback.is-right { border-color: #b6d3a8; background: #f1f7ec; }
+.q-feedback.is-wrong { border-color: #efc7bf; background: #fdecea; }
+/* 颜色语义：**朱色只表示「正确答案」**，所以「答错了」不跟它抢红 —— 用与「凶」同款的深墨 */
+.q-verdict { margin: 0; font-size: 15px; font-weight: 600; }
+.q-feedback.is-right .q-verdict { color: #3b6d11; }
+.q-feedback.is-wrong .q-verdict { color: #3b3530; }
+.q-answer { margin: 8px 0 0; font-size: 15px; }
+.q-answer b { font-size: 19px; }
+.q-answer-meta { margin-left: 10px; font-size: 13px; color: var(--ink-soft); }
+
+.q-actions { margin-top: 20px; justify-content: center; }
+
+.q-wrong-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.q-wrong-item {
+  width: 100%; display: grid; grid-template-columns: 1.6em 4.5em 5em 1fr; align-items: center; gap: 12px;
+  padding: 12px 16px; font: inherit; font-size: 15px; text-align: left; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; cursor: pointer;
+}
+.q-wrong-item:hover { border-color: #85b7eb; background: #eef6ff; }
+.q-wrong-symbol { font-size: 20px; }
+.q-wrong-id { font-size: 12.5px; color: var(--ink-soft); }
+.q-wrong-go { text-align: right; font-size: 13px; color: #185fa5; }
+.q-none { margin: 0; font-size: 14px; color: var(--ink-soft); }
+
+.q-sum { margin: 0; font-size: 15px; line-height: 1.9; }
+.q-sum b { font-variant-numeric: tabular-nums; }
+.q-sum-soft { margin: 8px 0 0; font-size: 13px; color: var(--ink-soft); }
+
+.q-foot { margin: 22px 0 0; font-size: 12.5px; color: #8c959f; text-align: center; }
+
+@media (max-width: 720px) {
+  .q-options { grid-template-columns: 1fr; }
+  .figure-lg .bar-whole { width: 170px; }
+  .figure-lg .bar-half { width: 78px; }
+  .q-wrong-item { grid-template-columns: 1.6em 1fr; row-gap: 4px; }
+  .q-wrong-id, .q-wrong-go { grid-column: 2 / -1; text-align: left; }
+}

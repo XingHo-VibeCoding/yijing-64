@@ -12,8 +12,12 @@ function lineLabel(index, isYang) {
  * 卦象图：六条爻线。
  * lines[0] 是初爻（最下），渲染时反转为自上而下。
  * 阳爻 = 一条整线；阴爻 = 中间断开的两段。
+ *
+ * @param size   'md'（详情页）| 'lg'（测验题面，线条更粗更长）
+ * @param labels 是否显示爻题（初九 / 六二…）。测验题面传 false —— 认卦象本身就是题目，
+ *               爻题属于「额外信息」，会变成提示
  */
-export default function HexagramFigure({ lines, size = 'md' }) {
+export default function HexagramFigure({ lines, size = 'md', labels = true }) {
   const topDown = lines
     .map((v, i) => ({ isYang: v === 1, label: lineLabel(i, v === 1) }))
     .reverse()
@@ -22,7 +26,7 @@ export default function HexagramFigure({ lines, size = 'md' }) {
     <div className={`figure figure-${size}`} role="img" aria-label="卦象图：六爻自下而上">
       {topDown.map((l, i) => (
         <div className="figure-row" key={i}>
-          <span className="figure-label">{l.label}</span>
+          {labels ? <span className="figure-label">{l.label}</span> : null}
           <span className="figure-line">
             {l.isYang ? (
               <i className="bar bar-whole" />
