@@ -421,15 +421,31 @@ body {
 }
 .ink-trans-fig {
   opacity: 0;                       /* 由 JS 每帧写入（关于时间的连续函数） */
-  will-change: transform, opacity;
+  will-change: transform, opacity, filter;
   padding: 28px 44px;
   background: rgba(253, 251, 246, .92);
   border-radius: 16px;
 }
-/* 墨盖着屏幕时：底下的内容模糊 + 压暗；两个值都由 JS 每帧写进 CSS 变量 */
+/* 光晕：卦象从墨雾里浮出时托住它的那团光。
+   绝对定位在舞台正中且不参与布局 —— 放进 flex 里会把卦象挤偏 */
+.ink-trans-halo {
+  position: absolute; left: 50%; top: 50%;
+  width: 720px; height: 720px; margin: -360px 0 0 -360px;
+  opacity: 0; pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(255, 252, 245, .55) 0%,
+    rgba(255, 250, 240, .32) 34%,
+    rgba(236, 232, 220, .16) 60%,
+    rgba(236, 232, 220, 0) 80%
+  );
+}
+/* 墨盖着屏幕时：底下的内容模糊 + 压暗；两个值都由 JS 每帧写进 CSS 变量
+   （已在 JS 里量化过 —— 值没变就不触发重绘，否则整页 blur 每帧重栅格化会卡） */
 .ink-transitioning .page {
   filter: blur(var(--ink-blur, 0px));
   opacity: var(--ink-dim, 1);
+  will-change: filter, opacity;
 }
 
 /* ============================================================
