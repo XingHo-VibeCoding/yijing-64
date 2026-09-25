@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import data from '../data/64卦.json'
 import yaoData from '../data/64卦-爻辞.json'
 import HexagramFigure from './HexagramFigure.jsx'
@@ -7,6 +7,7 @@ import Records from './Records.jsx'
 import Quiz from './Quiz.jsx'
 import SourceTag from './SourceTag.jsx'
 import * as store from './storage.js'
+import { fetchHexagrams, mockMode } from './mockApi.js'
 
 const VOLUMES = [
   { key: '上经', range: '1–30' },
@@ -75,12 +76,28 @@ export default function App() {
   const quizSum = store.quizSummary()
   const current = currentId === null ? null : data.items.find((h) => h.id === currentId)
 
+  /* ---------- 主视图的数据走 mock 接口（Day 8：本周不接真实 API） ----------
+     数据本身就在本地 JSON 里，「成功」态内容与原来完全一致；
+     走一层接口是为了让 **加载 / 空 / 错误**三种状态真实出现、可逐个截图核对，
+     也是 F6 接云端时的预演 —— 到时候只换 mockApi.js 的实现，这个状态机不动。 */
+  const [list, setList] = useState({ status: 'loading', items: [], error: '' })
+  const loadList = useCallback(() => {
+    setList({ status: 'loading', items: [], error: '' })
+    fetchHexagrams({ mode: mockMode() })
+      .then((r) => setList({ status: 'ready', items: r.items, error: '' }))
+      .catch((e) => setList({ status: 'error', items: [], error: (e && e.message) || '未知错误' }))
+  }, [])
+  useEffect(() => {
+    loadList()
+  }, [loadList])
+
   /* 回到总表时，把刚起的卦滚到视野中间 */
   useEffect(() => {
     if (casting || currentId !== null || view !== 'list' || highlightId == null) return
+    if (list.status !== 'ready') return // 列表还没渲染出来，滚了也白滚
     const el = document.querySelector(`[data-hid="${highlightId}"]`)
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [casting, currentId, view, highlightId])
+  }, [casting, currentId, view, highlightId, list.status])
 
   /* ---------- 地址栏 → 状态（直接打开 /#/h/15 也能进详情页） ---------- */
   useEffect(() => {
@@ -340,8 +357,7 @@ export default function App() {
     )
   }
 
-  /* ---------- 卦象爻辞总表 ---------- */
-  const total = data.items.length
+  /* ---------- 卦象爻辞总表（四种页面状态：加载 / 空 / 错误 / 成功） ---------- */
 
   return (
     <main className="page">
@@ -395,43 +411,85 @@ export default function App() {
         <p className="boundary">本页不提供占卜、预测与运势判断</p>
       </header>
 
-      {VOLUMES.map(({ key, range }) => (
-        <section key={key} className="volume">
-          <h2 className="volume-title">
-            {key} <span className="volume-range">{range}</span>
-          </h2>
-          <ul className="list">
-            {data.items
-              .filter((h) => h.volume === key)
-              .map((h) => (
-                <li key={h.id}>
-                  <button
-                    type="button"
-                    className={'item' + (highlightId === h.id ? ' is-hit' : '')}
-                    data-hid={h.id}
-                    onKeyDown={onItemKeyDown}
-                    onClick={() => {
-                      setHighlightId(null)
-                      openDetail(h.id, 'list')
-                    }}
-                  >
-                    <span className="item-id">{h.id}</span>
-                    <span className="item-symbol" aria-hidden="true">{h.symbol}</span>
-                    <span className="item-name">{h.name}</span>
-                    <span className="item-trigrams">
-                      上{h.upperTrigram}（{h.upperNature}）· 下{h.lowerTrigram}（{h.lowerNature}）
-                    </span>
-                    <span className="item-judgment">{h.judgment}</span>
-                  </button>
-                </li>
-              ))}
+      {/* 加载中：骨架行。骨架屏不是装饰 —— 它告诉用户「在动，不是坏了」 */}
+      {list.status === 'loading' && (
+        <section className="volume" aria-busy="true">
+          <ul className="list" aria-label="列表加载中">
+            {Array.from({ length: 6 }, (_, i) => (
+              <li key={i}>
+                <div className="item item-skeleton" />
+              </li>
+            ))}
           </ul>
         </section>
-      ))}
+      )}
 
-      <footer className="foot">
-        共 {total} 卦 · 每卦含六爻爻线与上下卦 · 数据来源：{data.meta.source}
-      </footer>
+      {/* 错误：明说出了什么事 + 给一条明确的出路（重试），不用 alert 拦住整个页面 */}
+      {list.status === 'error' && (
+        <section className="state state-error" role="alert">
+          <p className="state-title">列表没有加载出来</p>
+          <p className="state-sub">{list.error} —— 已起的卦与测验进度不受影响。点「重试」再试一次。</p>
+          <button type="button" className="cr-btn cr-btn-primary" onClick={loadList}>
+            重试
+          </button>
+        </section>
+      )}
+
+      {/* 空：空不是错，但最容易被当成「坏了」—— 所以要说清为什么空、下一步能做什么 */}
+      {list.status === 'ready' && list.items.length === 0 && (
+        <section className="state">
+          <p className="state-title">这里还没有卦</p>
+          <p className="state-sub">
+            数据源返回了空列表（?mock=empty 的演示）。按「重试」会重新加载一次。
+          </p>
+          <button type="button" className="cr-btn" onClick={loadList}>
+            重试
+          </button>
+        </section>
+      )}
+
+      {/* 成功 */}
+      {list.status === 'ready' && list.items.length > 0 && (
+        <>
+          {VOLUMES.map(({ key, range }) => (
+            <section key={key} className="volume">
+              <h2 className="volume-title">
+                {key} <span className="volume-range">{range}</span>
+              </h2>
+              <ul className="list">
+                {list.items
+                  .filter((h) => h.volume === key)
+                  .map((h) => (
+                    <li key={h.id}>
+                      <button
+                        type="button"
+                        className={'item' + (highlightId === h.id ? ' is-hit' : '')}
+                        data-hid={h.id}
+                        onKeyDown={onItemKeyDown}
+                        onClick={() => {
+                          setHighlightId(null)
+                          openDetail(h.id, 'list')
+                        }}
+                      >
+                        <span className="item-id">{h.id}</span>
+                        <span className="item-symbol" aria-hidden="true">{h.symbol}</span>
+                        <span className="item-name">{h.name}</span>
+                        <span className="item-trigrams">
+                          上{h.upperTrigram}（{h.upperNature}）· 下{h.lowerTrigram}（{h.lowerNature}）
+                        </span>
+                        <span className="item-judgment">{h.judgment}</span>
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          ))}
+
+          <footer className="foot">
+            共 {list.items.length} 卦 · 每卦含六爻爻线与上下卦 · 数据来源：{data.meta.source}
+          </footer>
+        </>
+      )}
     </main>
   )
 }

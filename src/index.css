@@ -409,3 +409,30 @@ body {
   .q-wrong-item { grid-template-columns: 1.6em 1fr; row-gap: 4px; }
   .q-wrong-id, .q-wrong-go { grid-column: 2 / -1; text-align: left; }
 }
+
+/* ============================================================
+   主视图的四种页面状态（Day 8）：加载 / 空 / 错误 / 成功
+   ============================================================ */
+/* 加载中：骨架行（和真行同高，页面不跳动） */
+.item-skeleton {
+  min-height: 47px;
+  background: linear-gradient(90deg, #ecebe5 25%, #f5f4ef 37%, #ecebe5 63%);
+  background-size: 400% 100%;
+  animation: q-skeleton 1.2s ease infinite;
+}
+@keyframes q-skeleton {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* 错误 / 空状态：一个居中的说明块 + 一条明确的出路（重试） */
+.state {
+  margin-top: 32px; padding: 36px 24px; text-align: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+}
+.state-title { margin: 0; font-size: 17px; font-weight: 600; }
+.state-sub { margin: 10px auto 18px; max-width: 30em; font-size: 13.5px; line-height: 1.8; color: var(--ink-soft); }
+.state .cr-btn { min-width: 120px; }
+/* 错误态要一眼和空态区分开：暖底 + 红字（但不刺眼） */
+.state-error { border-color: #efc7bf; background: #fdf3f1; }
+.state-error .state-title { color: #a83a29; }
