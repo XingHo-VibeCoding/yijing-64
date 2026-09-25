@@ -51,7 +51,8 @@ const FREEZE = (() => {
 })()
 
 /* ---------- 墨：点云叠出自然的墨斑（不规则边缘 + 浓淡层次） ---------- */
-function makeDotTexture(size = 128) {
+/** 墨点纹理（带毛边）。转场动画 `InkTransition` 也用这一份 —— 保证两处的墨是同一种墨 */
+export function makeDotTexture(size = 128) {
   const c = document.createElement('canvas')
   c.width = c.height = size
   const g = c.getContext('2d')

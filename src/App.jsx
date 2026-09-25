@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import data from '../data/64卦.json'
 import yaoData from '../data/64卦-爻辞.json'
 import HexagramFigure from './HexagramFigure.jsx'
@@ -6,6 +7,7 @@ import CastingAnimation from './CastingAnimation.jsx'
 import Records from './Records.jsx'
 import Quiz from './Quiz.jsx'
 import SourceTag from './SourceTag.jsx'
+import InkTransition from './InkTransition.jsx'
 import * as store from './storage.js'
 import { fetchHexagrams, mockMode } from './mockApi.js'
 
@@ -80,6 +82,8 @@ export default function App() {
      数据本身就在本地 JSON 里，「成功」态内容与原来完全一致；
      走一层接口是为了让 **加载 / 空 / 错误**三种状态真实出现、可逐个截图核对，
      也是 F6 接云端时的预演 —— 到时候只换 mockApi.js 的实现，这个状态机不动。 */
+  const [transition, setTransition] = useState(null) // { id, x, y } —— 点总表某一卦后的墨侵染转场
+
   const [list, setList] = useState({ status: 'loading', items: [], error: '' })
   const loadList = useCallback(() => {
     setList({ status: 'loading', items: [], error: '' })
@@ -131,6 +135,21 @@ export default function App() {
     setView('list')
     setCurrentId(id)
     go(`#/h/${id}`)
+  }
+
+  /**
+   * 从总表进详情：先放一段「涟漪 → 墨侵染 → 墨散 → 卦象浮现 → 归位」的转场。
+   * 起点取鼠标位置；**键盘回车触发时没有鼠标坐标**，改用被点那一行的中心（否则涟漪会从左上角冒出来）。
+   */
+  const startTransition = (id, e) => {
+    const hasPointer = Number.isFinite(e.clientX) && (e.clientX !== 0 || e.clientY !== 0)
+    const rect = e.currentTarget.getBoundingClientRect()
+    setTransition({
+      id,
+      x: hasPointer ? e.clientX : rect.left + rect.width / 2,
+      y: hasPointer ? e.clientY : rect.top + rect.height / 2,
+    })
+    openDetail(id, 'list')
   }
 
   /**
@@ -316,6 +335,20 @@ export default function App() {
           </p>
           <SourceTag kind="ours" note="这是本项目按卦辞整体处境作出的判定，不作未来断言" />
         </section>
+
+        {/* 从总表点进来的那一次，走「涟漪 → 墨侵染 → 墨散 → 卦象浮现 → 归位」的转场。
+            ⚠️ 必须用 portal 挂到 body 下：`.page` 上的 filter 会把 fixed 的定位基准
+            从视口改成页面本身（转场层会被卷进页面坐标，「屏幕中央」变成「整页中央」） */}
+        {transition &&
+          createPortal(
+            <InkTransition
+              key={transition.id}
+              lines={data.items.find((h) => h.id === transition.id)?.lines || []}
+              origin={{ x: transition.x, y: transition.y }}
+              onDone={() => setTransition(null)}
+            />,
+            document.body
+          )}
       </main>
     )
   }
@@ -466,9 +499,9 @@ export default function App() {
                         className={'item' + (highlightId === h.id ? ' is-hit' : '')}
                         data-hid={h.id}
                         onKeyDown={onItemKeyDown}
-                        onClick={() => {
+                        onClick={(e) => {
                           setHighlightId(null)
-                          openDetail(h.id, 'list')
+                          startTransition(h.id, e)
                         }}
                       >
                         <span className="item-id">{h.id}</span>

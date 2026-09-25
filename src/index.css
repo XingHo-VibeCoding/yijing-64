@@ -411,6 +411,28 @@ body {
 }
 
 /* ============================================================
+   转场：涟漪 → 墨侵染 → 墨散 → 卦象浮现 → 归位（F1 → F2）
+   ============================================================ */
+.ink-trans { position: fixed; inset: 0; z-index: 300; }        /* 压在所有内容之上 */
+.ink-trans-canvas { position: absolute; inset: 0; }
+.ink-trans-stage {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.ink-trans-fig {
+  opacity: 0;                       /* 由 JS 每帧写入（关于时间的连续函数） */
+  will-change: transform, opacity;
+  padding: 28px 44px;
+  background: rgba(253, 251, 246, .92);
+  border-radius: 16px;
+}
+/* 墨盖着屏幕时：底下的内容模糊 + 压暗；两个值都由 JS 每帧写进 CSS 变量 */
+.ink-transitioning .page {
+  filter: blur(var(--ink-blur, 0px));
+  opacity: var(--ink-dim, 1);
+}
+
+/* ============================================================
    主视图的四种页面状态（Day 8）：加载 / 空 / 错误 / 成功
    ============================================================ */
 /* 加载中：骨架行（和真行同高，页面不跳动） */
