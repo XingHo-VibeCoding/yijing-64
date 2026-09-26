@@ -208,7 +208,8 @@ export default function App() {
     const nextHex = data.items.find((h) => h.id === current.id + 1) || null
 
     return (
-      <main className="page">
+      // 详情页 = 竹简记录（.page-slips 覆盖成竹简质地）
+      <main className="page page-slips">
         <div className="detail-bar">
           <button
             type="button"

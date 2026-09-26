@@ -1,11 +1,44 @@
 :root {
   color-scheme: light;
-  --ink: #1f2328;
-  --ink-soft: #57606a;
-  --line: #d0d7de;
-  --bg: #ffffff;
-  --surface: #f6f8fa;
-  --accent: #0969da;
+  /* 中国传统材质配色：竹简（斑驳棕）/ 宣纸 / 木牌 / 墨 / 朱 */
+  --ink: #2b211a;              /* 墨褐 */
+  --ink-soft: #6a584a;
+  --line: #b39a78;             /* 竹木缝线 */
+  --bg: #c9b189;               /* 页面外：竹简与木器的环境色 */
+  --surface: #efe4cf;          /* 宣纸 */
+  --accent: #8c2f21;           /* 朱 */
+  --wood-1: #d3aa72;           /* 木牌浅 */
+  --wood-2: #bb8c55;           /* 木牌深 */
+  --slip-1: #e2cda1;           /* 竹简浅 */
+  --slip-2: #cdb384;           /* 竹简深（缝） */
+  --paper-1: #f3ead7;          /* 宣纸 */
+}
+
+/* ---------- 三种材质（纯 CSS，不引图片） ---------- */
+/* 宣纸：暖白底 + 极淡的纤维横竖纹 + 上方受光 */
+.tex-paper {
+  background-color: var(--paper-1);
+  background-image:
+    radial-gradient(120% 70% at 50% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 62%),
+    repeating-linear-gradient(90deg, rgba(120,95,60,.05) 0 1px, rgba(0,0,0,0) 1px 5px),
+    repeating-linear-gradient(0deg, rgba(120,95,60,.04) 0 1px, rgba(0,0,0,0) 1px 6px);
+}
+/* 竹简：竖向窄条 + 深色缝 + 横向编绳 */
+.tex-slips {
+  background-color: var(--slip-1);
+  background-image:
+    repeating-linear-gradient(90deg,
+      var(--slip-1) 0 38px, rgba(96,64,32,.22) 38px 40px,
+      var(--slip-1) 40px 78px, rgba(96,64,32,.22) 78px 80px),
+    repeating-linear-gradient(0deg, rgba(96,64,32,.05) 0 2px, rgba(255,255,255,.05) 2px 6px);
+}
+/* 木牌（令牌）：木质底 + 木纹 + 斜向高光 */
+.tex-wood {
+  background-color: var(--wood-1);
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0) 46%),
+    repeating-linear-gradient(0deg, rgba(90,58,28,.07) 0 3px, rgba(255,255,255,.05) 3px 7px),
+    repeating-linear-gradient(92deg, rgba(90,58,28,.05) 0 6px, rgba(255,255,255,.04) 6px 15px);
 }
 
 * { box-sizing: border-box; }
@@ -474,3 +507,159 @@ body {
 /* 错误态要一眼和空态区分开：暖底 + 红字（但不刺眼） */
 .state-error { border-color: #efc7bf; background: #fdf3f1; }
 .state-error .state-title { color: #a83a29; }
+
+/* ============================================================
+   中国传统风格：竹简（斑驳棕）/ 宣纸 / 木牌（令牌）
+   写在文件末尾 —— 靠层叠覆盖前面的简约样式，不动原有结构
+   ============================================================ */
+
+/* 页面外：竹简与木器的环境色（竖向竹条 + 横向木纹） */
+body {
+  background-color: #c2a87e;
+  background-image:
+    radial-gradient(120% 90% at 50% -10%, rgba(255,246,228,.38), rgba(0,0,0,0) 60%),
+    repeating-linear-gradient(90deg,
+      rgba(150,115,72,.30) 0 2px, rgba(0,0,0,0) 2px 30px,
+      rgba(96,64,32,.18) 30px 32px, rgba(0,0,0,0) 32px 58px),
+    repeating-linear-gradient(0deg, rgba(96,64,32,.06) 0 2px, rgba(255,255,255,.05) 2px 7px);
+  color: var(--ink);
+}
+
+/* ---------- 总表 / 记录页：一张宣纸铺在竹简上 ---------- */
+.page {
+  max-width: 900px; margin: 26px auto 56px; padding: 34px 30px 60px;
+  border-radius: 3px;
+  box-shadow: 0 10px 30px rgba(60,40,18,.22), inset 0 0 70px rgba(150,120,80,.10);
+  background-color: var(--paper-1);
+  background-image:
+    radial-gradient(120% 70% at 50% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 62%),
+    repeating-linear-gradient(90deg, rgba(120,95,60,.05) 0 1px, rgba(0,0,0,0) 1px 5px),
+    repeating-linear-gradient(0deg, rgba(120,95,60,.04) 0 1px, rgba(0,0,0,0) 1px 6px);
+}
+.foot { color: #7a6248; border-top-color: rgba(96,64,32,.28); }
+.boundary {
+  color: #6a5642; background: rgba(243,234,215,.92);
+  border: 1px dashed rgba(140,47,33,.45); border-radius: 3px;
+}
+.volume-title { color: #7a5c3c; }
+.volume-range { color: #8a6f52; }
+.head { border-bottom-color: rgba(96,64,32,.3); }
+.head h1 { letter-spacing: .06em; }
+
+/* ---------- 每一卦 = 一枚木牌（令牌） ---------- */
+.list { gap: 9px; }
+.item {
+  position: relative;
+  padding: 13px 16px;
+  color: #33261a;
+  border: 1px solid rgba(96,64,32,.45);
+  border-radius: 11px 11px 5px 5px;   /* 令牌：上圆下方 */
+  background-color: var(--wood-1);
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,0) 44%),
+    repeating-linear-gradient(0deg, rgba(90,58,28,.07) 0 3px, rgba(255,255,255,.05) 3px 7px),
+    repeating-linear-gradient(92deg, rgba(90,58,28,.05) 0 6px, rgba(255,255,255,.04) 6px 15px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.40),
+    inset 0 -2px 6px rgba(80,50,20,.18),
+    0 2px 3px rgba(70,45,20,.12);
+  transition: transform .14s ease, border-color .14s, background-color .14s;
+}
+/* 令牌顶端挂绳的小孔 */
+.item::before {
+  content: ''; position: absolute; left: 50%; top: 5px;
+  width: 6px; height: 6px; margin-left: -3px; border-radius: 50%;
+  background: rgba(58,36,14,.5);
+  box-shadow: inset 0 1px 1px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.45);
+}
+.item:hover {
+  border-color: rgba(140,47,33,.6); background-color: #dcb57e; transform: translateY(-1px);
+}
+.item:active { transform: translateY(0); }
+.item.is-hit {
+  border-color: var(--seal);
+  box-shadow: 0 0 0 2px rgba(140,47,33,.32), 0 2px 3px rgba(70,45,20,.12);
+}
+.item-id { color: #6b533a; }
+.item-name { font-weight: 600; }
+.item-trigrams { color: #5c4630; }
+.item-judgment { color: #33291d; }
+.item-skeleton {
+  border-radius: 11px 11px 5px 5px;
+  background: linear-gradient(90deg, #caa877 25%, #d8b98c 37%, #caa877 63%);
+  background-size: 400% 100%;
+}
+
+/* ---------- 起卦 / 入口按钮：木质匾额 ---------- */
+.cast-cta {
+  color: #f8f1e2;
+  background-color: #4a3524;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,0) 42%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.045) 0 3px, rgba(0,0,0,.06) 3px 6px);
+  border: 1px solid #2a1d12; border-radius: 9px;
+  box-shadow: 0 6px 18px rgba(50,32,14,.28), inset 0 1px 0 rgba(255,255,255,.14);
+}
+.cast-cta-sub { color: #e4c6a4; opacity: .8; }
+.my-records {
+  color: #33261a;
+  background-color: var(--wood-1);
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0) 46%),
+    repeating-linear-gradient(0deg, rgba(90,58,28,.06) 0 3px, rgba(255,255,255,.05) 3px 7px);
+  border: 1px solid rgba(96,64,32,.45); border-radius: 9px 9px 4px 4px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.38), 0 2px 3px rgba(70,45,20,.10);
+}
+.my-records:hover { border-color: rgba(140,47,33,.6); background-color: #dcb57e; }
+.my-records-n { color: #6b533a; }
+.back {
+  color: #33261a;
+  background-color: var(--wood-1);
+  background-image: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0) 46%);
+  border: 1px solid rgba(96,64,32,.45); border-radius: 8px 8px 4px 4px;
+}
+.back:hover { border-color: rgba(140,47,33,.6); background-color: #dcb57e; }
+
+/* ---------- 详情页：竹简记录 ---------- */
+.page-slips {
+  background-color: var(--slip-1);
+  background-image:
+    repeating-linear-gradient(90deg,
+      var(--slip-1) 0 38px, rgba(96,64,32,.24) 38px 40px,
+      var(--slip-1) 40px 78px, rgba(96,64,32,.24) 78px 80px),
+    repeating-linear-gradient(0deg, rgba(96,64,32,.05) 0 2px, rgba(255,255,255,.06) 2px 6px);
+  box-shadow: 0 12px 34px rgba(50,32,14,.3);
+}
+/* 竹简上的内容：压一张半透明宣纸，保证字读得清 */
+.page-slips .detail-head,
+.page-slips .figure-wrap,
+.page-slips .block {
+  background: rgba(243,234,215,.88);
+  border: 1px solid rgba(96,64,32,.30);
+  border-radius: 6px;
+  padding: 18px 22px;
+}
+.page-slips .block { margin-top: 26px; }
+.page-slips .foot { color: #6b533a; }
+
+/* ---------- 转场：展开的那卷竹简 ---------- */
+.ink-trans-scroll {
+  position: absolute; inset: 0;
+  opacity: 0; transform: scaleX(.04); transform-origin: 50% 50%;
+  background-color: var(--slip-1);
+  background-image:
+    repeating-linear-gradient(90deg,
+      var(--slip-1) 0 38px, rgba(96,64,32,.24) 38px 40px,
+      var(--slip-1) 40px 78px, rgba(96,64,32,.24) 78px 80px),
+    repeating-linear-gradient(0deg, rgba(96,64,32,.05) 0 2px, rgba(255,255,255,.06) 2px 6px);
+  box-shadow: 0 0 70px rgba(40,26,12,.5);
+  will-change: transform, opacity;
+}
+
+/* 转场：内容浮现前涌上来的那层墨（墨起） */
+.ink-trans-wash {
+  position: absolute; inset: 0;
+  opacity: 0; pointer-events: none;
+  background: radial-gradient(120% 100% at 50% 45%, rgba(22,19,17,.94), rgba(12,10,9,.98));
+  will-change: opacity;
+}
