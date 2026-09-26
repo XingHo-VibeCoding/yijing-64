@@ -8,9 +8,9 @@
   inset: 0;
   z-index: 200;
   overflow: hidden;
-  /* 白色宣纸：中心略亮，四周微微泛黄 */
+  /* 做旧宣纸：中心略亮，四周泛黄加深 + 茶渍斑 */
   background:
-    radial-gradient(circle at 50% 44%, #fdfbf6 0%, #f4f0e8 52%, #e9e3d8 100%);
+    radial-gradient(circle at 50% 44%, #f4edda 0%, #eaddbd 52%, #d6c49c 100%);
 }
 
 /* 宣纸的纤维质感（极淡的斜向纹） */
@@ -22,6 +22,8 @@
   pointer-events: none;
   opacity: 0.35;
   background-image:
+    radial-gradient(26% 20% at 18% 24%, rgba(150,108,55,.10), rgba(0,0,0,0) 70%),
+    radial-gradient(24% 18% at 80% 70%, rgba(150,108,55,.09), rgba(0,0,0,0) 70%),
     repeating-linear-gradient(102deg, rgba(120,105,85,.05) 0 1px, transparent 1px 7px),
     repeating-linear-gradient(14deg, rgba(120,105,85,.04) 0 1px, transparent 1px 11px);
 }
@@ -95,13 +97,13 @@
   overscroll-behavior: contain;
   scroll-padding-top: 12px;
   padding: 0 22px 52px;
-  /* 宣纸底衬：顶部透出墨与卦象，往下渐次压实，保证文字压在翻涌的水墨上也看得清 */
+  /* 宣纸底衬（做旧）：顶部透出墨与卦象，往下渐次压实，保证文字压在翻涌的水墨上也看得清 */
   background: linear-gradient(
     to bottom,
-    rgba(249, 246, 239, 0) 0,
-    rgba(249, 246, 239, .74) 64px,
-    rgba(249, 246, 239, .93) 150px,
-    rgba(249, 246, 239, .96) 100%
+    rgba(240, 229, 203, 0) 0,
+    rgba(240, 229, 203, .74) 64px,
+    rgba(240, 229, 203, .93) 150px,
+    rgba(240, 229, 203, .96) 100%
   );
   animation: cr-in .7s ease both;
 }

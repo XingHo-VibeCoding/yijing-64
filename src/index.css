@@ -1,17 +1,17 @@
 :root {
   color-scheme: light;
-  /* 中国传统材质配色：竹简（斑驳棕）/ 宣纸 / 木牌 / 墨 / 朱 */
+  /* 中国传统材质配色（v3 深色做旧）：深棕竹简 / 做旧宣纸 / 深色做旧木牌 / 墨 / 朱 */
   --ink: #2b211a;              /* 墨褐 */
-  --ink-soft: #6a584a;
-  --line: #b39a78;             /* 竹木缝线 */
-  --bg: #c9b189;               /* 页面外：竹简与木器的环境色 */
-  --surface: #efe4cf;          /* 宣纸 */
+  --ink-soft: #5f4d3e;
+  --line: #8a6b44;             /* 竹木缝线 */
+  --bg: #2f1d0d;               /* 页面外：深色做旧木桌面 */
+  --surface: #e8dab8;          /* 做旧宣纸 */
   --accent: #8c2f21;           /* 朱 */
-  --wood-1: #d3aa72;           /* 木牌浅 */
-  --wood-2: #bb8c55;           /* 木牌深 */
-  --slip-1: #e2cda1;           /* 竹简浅 */
-  --slip-2: #cdb384;           /* 竹简深（缝） */
-  --paper-1: #f3ead7;          /* 宣纸 */
+  --wood-1: #4c3016;           /* 做旧木深 */
+  --wood-2: #33200e;           /* 做旧木更深 */
+  --slip-1: #9a6a33;           /* 竹片主体（深棕做旧） */
+  --slip-2: #1c0e04;           /* 竹片之间近黑的缝 */
+  --paper-1: #e9d9b4;          /* 做旧宣纸 */
 }
 
 /* ---------- 三种材质（纯 CSS，不引图片） ---------- */
@@ -509,150 +509,208 @@ body {
 .state-error .state-title { color: #a83a29; }
 
 /* ============================================================
-   中国传统风格：竹简（斑驳棕）/ 宣纸 / 木牌（令牌）
+   中国传统风格（深色做旧）：竹简（一片片竹片 + 深缝 + 编绳）/
+   做旧宣纸 / 深色做旧木牌（令牌）
    写在文件末尾 —— 靠层叠覆盖前面的简约样式，不动原有结构
    ============================================================ */
 
-/* 页面外：竹简与木器的环境色（竖向竹条 + 横向木纹） */
+/* 页面外：深色做旧木桌面（横向木板纹 + 四角压暗） */
 body {
-  background-color: #c2a87e;
+  background-color: #2f1d0d;
   background-image:
-    radial-gradient(120% 90% at 50% -10%, rgba(255,246,228,.38), rgba(0,0,0,0) 60%),
+    radial-gradient(120% 110% at 50% 34%, rgba(0,0,0,0) 42%, rgba(0,0,0,.52) 100%),
+    radial-gradient(110% 70% at 50% -10%, rgba(170,118,60,.22), rgba(0,0,0,0) 58%),
+    repeating-linear-gradient(0deg,
+      rgba(0,0,0,.20) 0 2px, rgba(0,0,0,0) 2px 11px,
+      rgba(200,150,90,.05) 11px 13px, rgba(0,0,0,0) 13px 27px),
     repeating-linear-gradient(90deg,
-      rgba(150,115,72,.30) 0 2px, rgba(0,0,0,0) 2px 30px,
-      rgba(96,64,32,.18) 30px 32px, rgba(0,0,0,0) 32px 58px),
-    repeating-linear-gradient(0deg, rgba(96,64,32,.06) 0 2px, rgba(255,255,255,.05) 2px 7px);
+      rgba(0,0,0,.13) 0 48px, rgba(0,0,0,0) 48px 122px,
+      rgba(0,0,0,.08) 122px 152px, rgba(0,0,0,0) 152px 244px);
   color: var(--ink);
 }
 
-/* ---------- 总表 / 记录页：一张宣纸铺在竹简上 ---------- */
+/* ---------- 总表 / 记录页：一张做旧宣纸铺在深色木桌上 ---------- */
 .page {
   max-width: 900px; margin: 26px auto 56px; padding: 34px 30px 60px;
   border-radius: 3px;
-  box-shadow: 0 10px 30px rgba(60,40,18,.22), inset 0 0 70px rgba(150,120,80,.10);
-  background-color: var(--paper-1);
+  box-shadow:
+    0 16px 44px rgba(12,6,1,.55),
+    inset 0 0 46px rgba(122,84,38,.26),
+    inset 0 0 4px rgba(90,60,25,.32);
+  background-color: #e9d9b4;
   background-image:
-    radial-gradient(120% 70% at 50% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 62%),
-    repeating-linear-gradient(90deg, rgba(120,95,60,.05) 0 1px, rgba(0,0,0,0) 1px 5px),
-    repeating-linear-gradient(0deg, rgba(120,95,60,.04) 0 1px, rgba(0,0,0,0) 1px 6px);
+    radial-gradient(130% 80% at 50% 0%, rgba(255,250,236,.40), rgba(0,0,0,0) 62%),
+    radial-gradient(34% 26% at 14% 26%, rgba(150,108,55,.13), rgba(0,0,0,0) 72%),
+    radial-gradient(26% 20% at 82% 44%, rgba(150,108,55,.11), rgba(0,0,0,0) 72%),
+    radial-gradient(30% 22% at 46% 86%, rgba(140,100,50,.10), rgba(0,0,0,0) 72%),
+    radial-gradient(20% 14% at 66% 12%, rgba(140,100,50,.08), rgba(0,0,0,0) 72%),
+    repeating-linear-gradient(90deg, rgba(120,90,50,.05) 0 1px, rgba(0,0,0,0) 1px 5px),
+    repeating-linear-gradient(0deg, rgba(120,90,50,.04) 0 1px, rgba(0,0,0,0) 1px 6px);
 }
-.foot { color: #7a6248; border-top-color: rgba(96,64,32,.28); }
+.foot { color: #6f5636; border-top-color: rgba(90,60,28,.34); }
 .boundary {
-  color: #6a5642; background: rgba(243,234,215,.92);
-  border: 1px dashed rgba(140,47,33,.45); border-radius: 3px;
+  color: #6a5335; background: rgba(234,220,186,.92);
+  border: 1px dashed rgba(140,47,33,.5); border-radius: 3px;
 }
-.volume-title { color: #7a5c3c; }
-.volume-range { color: #8a6f52; }
-.head { border-bottom-color: rgba(96,64,32,.3); }
+.volume-title { color: #6f5330; }
+.volume-range { color: #7d6244; }
+.head { border-bottom-color: rgba(90,60,28,.36); }
 .head h1 { letter-spacing: .06em; }
 
-/* ---------- 每一卦 = 一枚木牌（令牌） ---------- */
+/* ---------- 每一卦 = 一枚深色做旧木牌（令牌） ---------- */
 .list { gap: 9px; }
 .item {
   position: relative;
   padding: 13px 16px;
-  color: #33261a;
-  border: 1px solid rgba(96,64,32,.45);
+  color: #f1e4c8;
+  border: 1px solid #1a0d03;
   border-radius: 11px 11px 5px 5px;   /* 令牌：上圆下方 */
-  background-color: var(--wood-1);
+  background-color: #4c3016;
   background-image:
-    linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,0) 44%),
-    repeating-linear-gradient(0deg, rgba(90,58,28,.07) 0 3px, rgba(255,255,255,.05) 3px 7px),
-    repeating-linear-gradient(92deg, rgba(90,58,28,.05) 0 6px, rgba(255,255,255,.04) 6px 15px);
+    linear-gradient(180deg, rgba(255,225,175,.13), rgba(0,0,0,0) 42%),
+    repeating-linear-gradient(92deg,
+      rgba(0,0,0,.18) 0 3px, rgba(0,0,0,0) 3px 8px,
+      rgba(255,215,160,.05) 8px 10px, rgba(0,0,0,0) 10px 16px),
+    repeating-linear-gradient(0deg, rgba(0,0,0,.10) 0 2px, rgba(0,0,0,0) 2px 6px);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.40),
-    inset 0 -2px 6px rgba(80,50,20,.18),
-    0 2px 3px rgba(70,45,20,.12);
+    inset 0 1px 0 rgba(255,225,175,.16),
+    inset 0 0 22px rgba(0,0,0,.42),
+    inset 0 -3px 8px rgba(0,0,0,.30),
+    0 3px 6px rgba(10,5,1,.45);
   transition: transform .14s ease, border-color .14s, background-color .14s;
 }
 /* 令牌顶端挂绳的小孔 */
 .item::before {
   content: ''; position: absolute; left: 50%; top: 5px;
   width: 6px; height: 6px; margin-left: -3px; border-radius: 50%;
-  background: rgba(58,36,14,.5);
-  box-shadow: inset 0 1px 1px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.45);
+  background: rgba(8,4,1,.78);
+  box-shadow: inset 0 1px 1px rgba(0,0,0,.8), 0 1px 0 rgba(255,225,175,.14);
 }
 .item:hover {
-  border-color: rgba(140,47,33,.6); background-color: #dcb57e; transform: translateY(-1px);
+  border-color: rgba(196,126,62,.6); background-color: #5c3c1d; transform: translateY(-1px);
 }
 .item:active { transform: translateY(0); }
 .item.is-hit {
   border-color: var(--seal);
-  box-shadow: 0 0 0 2px rgba(140,47,33,.32), 0 2px 3px rgba(70,45,20,.12);
+  box-shadow: 0 0 0 2px rgba(140,47,33,.38), 0 3px 6px rgba(10,5,1,.45);
 }
-.item-id { color: #6b533a; }
-.item-name { font-weight: 600; }
-.item-trigrams { color: #5c4630; }
-.item-judgment { color: #33291d; }
+.item-id { color: #c3a476; }
+.item-name { font-weight: 600; color: #f5ead0; }
+.item-trigrams { color: #c9ae82; }
+.item-judgment { color: #ead8b4; }
 .item-skeleton {
   border-radius: 11px 11px 5px 5px;
-  background: linear-gradient(90deg, #caa877 25%, #d8b98c 37%, #caa877 63%);
+  background: linear-gradient(90deg, #3c2711 25%, #4e3318 37%, #3c2711 63%);
   background-size: 400% 100%;
 }
 
-/* ---------- 起卦 / 入口按钮：木质匾额 ---------- */
+/* ---------- 起卦 / 入口按钮：深色做旧木匾 ---------- */
 .cast-cta {
-  color: #f8f1e2;
-  background-color: #4a3524;
+  color: #f6ecd8;
+  background-color: #2e1c0c;
   background-image:
-    linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,0) 42%),
-    repeating-linear-gradient(0deg, rgba(255,255,255,.045) 0 3px, rgba(0,0,0,.06) 3px 6px);
-  border: 1px solid #2a1d12; border-radius: 9px;
-  box-shadow: 0 6px 18px rgba(50,32,14,.28), inset 0 1px 0 rgba(255,255,255,.14);
+    linear-gradient(180deg, rgba(255,225,175,.10), rgba(0,0,0,0) 42%),
+    repeating-linear-gradient(92deg,
+      rgba(0,0,0,.20) 0 3px, rgba(0,0,0,0) 3px 8px,
+      rgba(255,215,160,.04) 8px 10px, rgba(0,0,0,0) 10px 16px);
+  border: 1px solid #140a02; border-radius: 9px;
+  box-shadow:
+    0 6px 18px rgba(8,4,1,.5),
+    inset 0 1px 0 rgba(255,225,175,.12),
+    inset 0 0 18px rgba(0,0,0,.4);
 }
-.cast-cta-sub { color: #e4c6a4; opacity: .8; }
+.cast-cta-sub { color: #d8b58a; opacity: .85; }
 .my-records {
-  color: #33261a;
-  background-color: var(--wood-1);
+  color: #f1e4c8;
+  background-color: #4c3016;
   background-image:
-    linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0) 46%),
-    repeating-linear-gradient(0deg, rgba(90,58,28,.06) 0 3px, rgba(255,255,255,.05) 3px 7px);
-  border: 1px solid rgba(96,64,32,.45); border-radius: 9px 9px 4px 4px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.38), 0 2px 3px rgba(70,45,20,.10);
+    linear-gradient(180deg, rgba(255,225,175,.11), rgba(0,0,0,0) 46%),
+    repeating-linear-gradient(92deg,
+      rgba(0,0,0,.16) 0 3px, rgba(0,0,0,0) 3px 8px,
+      rgba(255,215,160,.04) 8px 10px, rgba(0,0,0,0) 10px 16px);
+  border: 1px solid #1a0d03; border-radius: 9px 9px 4px 4px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,225,175,.14),
+    inset 0 0 18px rgba(0,0,0,.38),
+    0 2px 4px rgba(10,5,1,.4);
 }
-.my-records:hover { border-color: rgba(140,47,33,.6); background-color: #dcb57e; }
-.my-records-n { color: #6b533a; }
+.my-records:hover { border-color: rgba(196,126,62,.6); background-color: #5c3c1d; }
+.my-records-n { color: #c3a476; }
 .back {
-  color: #33261a;
-  background-color: var(--wood-1);
-  background-image: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0) 46%);
-  border: 1px solid rgba(96,64,32,.45); border-radius: 8px 8px 4px 4px;
-}
-.back:hover { border-color: rgba(140,47,33,.6); background-color: #dcb57e; }
-
-/* ---------- 详情页：竹简记录 ---------- */
-.page-slips {
-  background-color: var(--slip-1);
+  color: #f1e4c8;
+  background-color: #4c3016;
   background-image:
-    repeating-linear-gradient(90deg,
-      var(--slip-1) 0 38px, rgba(96,64,32,.24) 38px 40px,
-      var(--slip-1) 40px 78px, rgba(96,64,32,.24) 78px 80px),
-    repeating-linear-gradient(0deg, rgba(96,64,32,.05) 0 2px, rgba(255,255,255,.06) 2px 6px);
-  box-shadow: 0 12px 34px rgba(50,32,14,.3);
+    linear-gradient(180deg, rgba(255,225,175,.10), rgba(0,0,0,0) 46%),
+    repeating-linear-gradient(92deg, rgba(0,0,0,.14) 0 3px, rgba(0,0,0,0) 3px 9px);
+  border: 1px solid #1a0d03; border-radius: 8px 8px 4px 4px;
+  box-shadow: inset 0 1px 0 rgba(255,225,175,.12), 0 2px 4px rgba(10,5,1,.38);
 }
-/* 竹简上的内容：压一张半透明宣纸，保证字读得清 */
+.back:hover { border-color: rgba(196,126,62,.6); background-color: #5c3c1d; }
+
+/* ---------- 详情页：竹简记录（一片片竹片 + 近黑深缝 + 顶部编绳） ---------- */
+.page-slips {
+  position: relative;
+  background-color: #8a5c28;
+  background-image:
+    /* 竹片：一片 46px + 近黑缝 6px；片内有弧面明暗（中间受光、两缘入影） */
+    repeating-linear-gradient(90deg,
+      #5f3a17 0px, #9a6a33 7px, #b0803f 21px, #96662e 38px, #573514 46px,
+      #2a1608 47px, #150a02 50px, #5f3a17 52px),
+    /* 相邻竹片深浅交替 */
+    repeating-linear-gradient(90deg,
+      rgba(255,226,170,.07) 0 46px, rgba(0,0,0,0) 46px 104px),
+    /* 竹纤维细丝（纵向） */
+    repeating-linear-gradient(90deg, rgba(40,20,5,.10) 0 1px, rgba(0,0,0,0) 1px 4px),
+    /* 年久色斑（横向条带） */
+    repeating-linear-gradient(0deg,
+      rgba(30,15,4,.07) 0 2px, rgba(0,0,0,0) 2px 9px,
+      rgba(255,230,180,.04) 9px 11px, rgba(0,0,0,0) 11px 18px);
+  box-shadow:
+    0 16px 44px rgba(10,5,1,.6),
+    inset 0 0 90px rgba(22,11,2,.35);
+}
+/* 顶部编绳：穿过竹片的那根绳 */
+.page-slips::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 14px; height: 7px;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,.35) 0 2px, rgba(0,0,0,0) 2px 6px),
+    linear-gradient(180deg, #7a4520, #4a2510 55%, #2e1506);
+  box-shadow: 0 1px 3px rgba(0,0,0,.55), 0 -1px 2px rgba(0,0,0,.4);
+}
+/* 竹简上的内容：压做旧宣纸条，保证字读得清 */
 .page-slips .detail-head,
 .page-slips .figure-wrap,
 .page-slips .block {
-  background: rgba(243,234,215,.88);
-  border: 1px solid rgba(96,64,32,.30);
-  border-radius: 6px;
+  background-color: rgba(236,222,190,.94);
+  background-image:
+    radial-gradient(120% 80% at 50% 0%, rgba(255,250,238,.32), rgba(0,0,0,0) 60%),
+    radial-gradient(30% 22% at 22% 30%, rgba(150,108,55,.10), rgba(0,0,0,0) 70%),
+    radial-gradient(24% 18% at 78% 66%, rgba(150,108,55,.09), rgba(0,0,0,0) 70%);
+  border: 1px solid rgba(64,40,16,.42);
+  border-radius: 4px;
   padding: 18px 22px;
+  box-shadow: 0 2px 5px rgba(15,8,2,.35), inset 0 0 18px rgba(120,82,38,.14);
 }
 .page-slips .block { margin-top: 26px; }
-.page-slips .foot { color: #6b533a; }
+.page-slips .foot { color: #7a5e3c; }
 
-/* ---------- 转场：展开的那卷竹简 ---------- */
+/* ---------- 转场：展开的那卷竹简（与详情页同一种竹片） ---------- */
 .ink-trans-scroll {
   position: absolute; inset: 0;
   opacity: 0; transform: scaleX(.04); transform-origin: 50% 50%;
-  background-color: var(--slip-1);
+  background-color: #8a5c28;
   background-image:
     repeating-linear-gradient(90deg,
-      var(--slip-1) 0 38px, rgba(96,64,32,.24) 38px 40px,
-      var(--slip-1) 40px 78px, rgba(96,64,32,.24) 78px 80px),
-    repeating-linear-gradient(0deg, rgba(96,64,32,.05) 0 2px, rgba(255,255,255,.06) 2px 6px);
-  box-shadow: 0 0 70px rgba(40,26,12,.5);
+      #5f3a17 0px, #9a6a33 7px, #b0803f 21px, #96662e 38px, #573514 46px,
+      #2a1608 47px, #150a02 50px, #5f3a17 52px),
+    repeating-linear-gradient(90deg,
+      rgba(255,226,170,.07) 0 46px, rgba(0,0,0,0) 46px 104px),
+    repeating-linear-gradient(90deg, rgba(40,20,5,.10) 0 1px, rgba(0,0,0,0) 1px 4px),
+    repeating-linear-gradient(0deg,
+      rgba(30,15,4,.07) 0 2px, rgba(0,0,0,0) 2px 9px,
+      rgba(255,230,180,.04) 9px 11px, rgba(0,0,0,0) 11px 18px);
+  box-shadow: 0 0 70px rgba(8,4,1,.6);
   will-change: transform, opacity;
 }
 
