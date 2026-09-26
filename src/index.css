@@ -721,3 +721,65 @@ body {
   background: radial-gradient(120% 100% at 50% 45%, rgba(22,19,17,.94), rgba(12,10,9,.98));
   will-change: opacity;
 }
+
+/* ============================================================
+   Day 9 · 设计审查修订（只改样式，不动结构、不加新装饰）
+   背景：Day 8 的木牌 / 竹简改版是在文件尾部「覆盖式」做的，
+        有 5 处样式没跟着迁移过来 —— 本节把它们补齐。
+   ============================================================ */
+
+/* ① 三处关键标签仍是旧版冷灰 #8c959f，压在宣纸底上只有 2.19–2.28 的对比度
+      （WCAG 对 11.5–12px 这类小字要求 ≥4.5）。
+      它们恰好是「读懂一个卦最需要的标签」：卦辞/象辞、爻题、上卦/下卦。
+      统一迁到与 .volume-title 相同的暖色（实测 5.09）。 */
+.classic-label,
+.figure-label,
+.trigrams dt { color: #6f5330; }
+
+/* ② 另两处小字对比度不足：
+      .volume-range（上经 1–30）原 4.06 —— 与卷名同色，靠字号 / 字重区分层级
+      .yao-label（六爻爻题）原 4.31 —— 改用既有的 --ink-soft 暖色（实测 6.02） */
+.volume-range { color: #6f5330; }
+.yao-label { color: var(--ink-soft); }
+
+/* ③ 首页入口分级：三个入口原本同宽、同形、同为深色大木匾，
+      与下面的卦列表「同材质同宽度」—— 主操作（起一卦）被淹掉，
+      也容易被误读成「前三条也是卦」。
+      改为：起一卦＝深色木匾（主）；我的记录 / 测一测＝做旧宣纸条（次）。
+      纸底配方直接沿用 .page-slips .block 的既有做法，不引入新装饰。 */
+.my-records {
+  color: #4a3115;
+  background-color: rgba(236, 222, 190, .94);
+  background-image:
+    repeating-linear-gradient(90deg, rgba(120,90,50,.05) 0 1px, rgba(0,0,0,0) 1px 5px),
+    repeating-linear-gradient(0deg, rgba(120,90,50,.04) 0 1px, rgba(0,0,0,0) 1px 6px);
+  border: 1px solid rgba(64, 40, 16, .42);
+  border-radius: 4px;
+  padding: 7px 20px;
+  box-shadow: inset 0 0 14px rgba(120, 82, 38, .12);
+}
+.my-records:hover { border-color: rgba(140, 47, 33, .55); background-color: rgba(242, 230, 203, .96); }
+.my-records-n { color: #6f5330; }
+/* 两个次级入口之间收紧，与主操作拉开距离 */
+.my-records + .my-records { margin-top: 7px; }
+
+/* ④ 手机端详情页顶栏：换行后「收藏这一卦」会独自掉到第二行并左对齐（孤立错位）。
+      改成「返回 ←→ 收藏」同行两端对齐、翻页独占一行靠右。 */
+@media (max-width: 560px) {
+  .detail-bar { gap: 8px; }
+  .detail-bar .back { order: 1; }
+  .detail-bar .fav-btn { order: 2; margin-left: auto; }
+  .detail-bar .pager { order: 3; margin-left: auto; }
+}
+
+/* ⑤ 禁用按钮：原来只写了 opacity:.38 —— 连边框一起淡进纸里，
+      「上一卦」几乎看不见，用户不知道这里有个按钮。
+      改为保留纸底 + 虚线边框、只淡化文字：明确表达「是个按钮，但不可用」。 */
+.pager-btn:disabled {
+  opacity: 1;
+  color: rgba(95, 77, 62, .62);
+  background-color: rgba(232, 218, 184, .55);
+  border-color: rgba(64, 40, 16, .35);
+  border-style: dashed;
+  cursor: not-allowed;
+}
