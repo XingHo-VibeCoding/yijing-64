@@ -13,22 +13,28 @@ import { makeDotTexture } from './CastingAnimation.jsx'
  */
 const INK = '22,19,17'
 
-const T_RIPPLE_END = 1200     // ① 涟漪（石头入水：冲击 → 波列推开）
-const T_DYE_START = 400       // ② 墨开始侵染
-const T_DYE_FULL = 3000       //    基本铺满（此时遮挡最完全）
-const T_FLOOD_START = 1600    //    整片淹没的起点：把墨点之间的缝合上
-const T_OUT_END = 3900        // ③ 墨散尽
-const T_SCROLL_START = 3700   // ④ 竹简开始展开（与墨散略有重叠，接得上）
-const T_SCROLL_END = 4900     //    展开到占满屏幕
-const T_SCROLL_FADE = 5150    //    交给真正的详情页（同为竹简质地，无缝）
-const T_WASH_START = 4700     // ⑤ 内容浮现前的一层墨（墨起）
-const T_WASH_PEAK = 5050
-const T_WASH_END = 5850
-const T_DONE = 6000
+/* 时间轴（v3：涟漪更慢更有诗意 / 卷轴展开放慢 / 最后一拍才交接详情页）
+   涟漪 0–2000 → 墨侵染 700–3600 → 墨散 3600–4600
+   → 卷轴展开 4400–6600（2.2 秒，慢）→ 边缘墨流 4600–7000
+   → 最后一层墨起 6600–7800：把「卷轴 → 详情页」的交接盖住，**这一拍之前绝不露出详情页** */
+const T_RIPPLE_END = 2000     // ① 涟漪（石头入水：冲击 → 波列推开 → 水珠）
+const T_DYE_START = 700       // ② 墨开始侵染
+const T_DYE_FULL = 3600       //    基本铺满（此时遮挡最完全）
+const T_FLOOD_START = 2200    //    整片淹没的起点：把墨点之间的缝合上
+const T_OUT_END = 4600        // ③ 墨散尽
+const T_SCROLL_START = 4400   // ④ 竹简开始展开（与墨散略有重叠，接得上）
+const T_SCROLL_END = 6600     //    展开到占满屏幕（2.2 秒 —— 慢）
+const T_EDGE_START = 4600     //    卷轴边缘的淡黑墨开始沿边往下淌
+const T_EDGE_END = 7100       //    墨流随展开推进、渐淡收尾
+const T_WASH_START = 6600     // ⑤ 最后一层墨（墨起）：盖住「卷轴 → 详情页」的交接
+const T_WASH_PEAK = 7000      //    峰值时屏幕几乎全墨 —— 此刻才允许底下的详情页换上来
+const T_WASH_END = 7800       //    墨退去，详情页这一拍才显出来
+const T_DONE = 7900
 
 const BLUR_PEAK = 10          // 墨侵染期的峰值模糊（px）
 const BLUR_EMERGE = 8         // 墨起时的模糊（px）
-const PAGE_DIM = 0.15         // 墨盖着时，底下内容压暗到多少
+const PAGE_DIM = 0.15         // 转场全程，底下内容压暗到多少（这一档才叫「看不见」）
+const HOLD_BLUR = 6           // 卷轴展开期间保持的模糊（px）—— 不糊的话详情页还是能被认出来
 
 const SPEED = (() => {
   if (typeof window === 'undefined') return 1
@@ -78,12 +84,15 @@ const R0 = 120
 
 export default function InkTransition({ lines, origin, onDone }) {
   const canvasRef = useRef(null)
+  const edgeRef = useRef(null)      // 卷轴边缘的淡墨（画在卷轴**之上**，才能压住竹简边）
   const scrollRef = useRef(null)
   const washRef = useRef(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
+    const edge = edgeRef.current
     const ctx = canvas.getContext('2d')
+    const ectx = edge ? edge.getContext('2d') : null
     if (!canvas || !ctx) return
 
     /* 两张画布：stain **不清空**（累积墨痕 = 侵染感），main 每帧清空后合成 */
@@ -96,14 +105,20 @@ export default function InkTransition({ lines, origin, onDone }) {
     const fit = () => {
       W = window.innerWidth
       H = window.innerHeight
-      for (const c of [canvas, stain]) {
+      for (const c of [canvas, stain, edge]) {
+        if (!c) continue
         c.width = Math.round(W * dpr)
         c.height = Math.round(H * dpr)
       }
       canvas.style.width = W + 'px'
       canvas.style.height = H + 'px'
+      if (edge) {
+        edge.style.width = W + 'px'
+        edge.style.height = H + 'px'
+      }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       sctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      if (ectx) ectx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
     fit()
 
@@ -125,15 +140,31 @@ export default function InkTransition({ lines, origin, onDone }) {
     const loop = (now) => {
       const el = FREEZE != null ? FREEZE : (now - start) * SPEED
 
-      /* ---------- ① 石头入水 ---------- */
+      /* ---------- ① 石头入水（更慢、更真实：不规则波圈 + 二次溅落 + 水珠） ---------- */
       ctx.clearRect(0, 0, W, H)
-      if (el < T_RIPPLE_END + 260) {
+      if (el < T_RIPPLE_END + 300) {
         const p = clamp01(el / T_RIPPLE_END)
 
+        // 画一圈「不规则」的水波：真实的水纹不是正圆，半径带角向扰动
+        const ringPath = (cx, cy, r, phase, amp) => {
+          ctx.beginPath()
+          const SEG = 40
+          for (let i = 0; i <= SEG; i++) {
+            const th = (i / SEG) * Math.PI * 2
+            const rr =
+              r * (1 + amp * Math.sin(th * 3 + phase) + amp * 0.55 * Math.sin(th * 5 - phase * 0.7 + 1.3))
+            const x = cx + Math.cos(th) * rr
+            const y = cy + Math.sin(th) * rr
+            if (i === 0) ctx.moveTo(x, y)
+            else ctx.lineTo(x, y)
+          }
+          ctx.closePath()
+        }
+
         // 1a. 石头砸下去的那一下：触点先陷出一个暗坑，随后被水填平
-        const dimpleA = 0.52 * (1 - clamp01((el - 200) / 800))
+        const dimpleA = 0.52 * (1 - clamp01((el - 300) / 1100))
         if (dimpleA > 0.005) {
-          const rr = 26 + 30 * easeOutCubic(clamp01(el / 260))
+          const rr = 26 + 30 * easeOutCubic(clamp01(el / 320))
           const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, rr)
           g.addColorStop(0, `rgba(${INK},${dimpleA})`)
           g.addColorStop(0.62, `rgba(${INK},${dimpleA * 0.45})`)
@@ -145,18 +176,18 @@ export default function InkTransition({ lines, origin, onDone }) {
         }
 
         // 1b. 波列：一圈圈向外推开。越往外波长越大（色散）、振幅越小（1/√r 量级）
-        const front = easeOutCubic(p) * diag * 0.62
-        const CRESTS = 8
+        const front = (1 - Math.pow(1 - p, 2.2)) * diag * 0.62
+        const CRESTS = 9
         for (let k = 0; k < CRESTS; k++) {
-          const lambda = 38 + 18 * p + k * 5
+          const lambda = 40 + 20 * p + k * 6
           const r = front - k * lambda
           if (r <= 4) continue
-          const amp = 0.46 * Math.exp(-k * 0.42) * (1 - p) * (r / Math.max(1, front))
+          const amp = 0.46 * Math.exp(-k * 0.40) * (1 - p) * (r / Math.max(1, front))
           if (amp <= 0.004) continue
-          ctx.beginPath()
-          ctx.arc(o.x, o.y, r, 0, Math.PI * 2)
-          ctx.strokeStyle = `rgba(${INK},${amp * 0.35})`
-          ctx.lineWidth = 13 // 外柔边：水的厚度
+          const phase = k * 1.7 + p * 2.4
+          ringPath(o.x, o.y, r, phase, 0.012)
+          ctx.strokeStyle = `rgba(${INK},${amp * 0.30})`
+          ctx.lineWidth = 15 // 外柔边：水的厚度
           ctx.stroke()
           ctx.strokeStyle = `rgba(${INK},${amp})`
           ctx.lineWidth = 4 // 波峰
@@ -166,14 +197,34 @@ export default function InkTransition({ lines, origin, onDone }) {
           ctx.stroke()
         }
 
-        // 1c. 溅起的一线：入水那一瞬间最前一圈更亮（石头激起的那一道）
-        if (p < 0.4 && front > 6) {
-          const a = 0.32 * (1 - p / 0.4)
-          ctx.beginPath()
-          ctx.arc(o.x, o.y, front, 0, Math.PI * 2)
-          ctx.strokeStyle = `rgba(${INK},${a})`
-          ctx.lineWidth = 2
-          ctx.stroke()
+        // 1b-2. 第二组更淡的波（二次溅落），错后一拍出发 —— 水面才有层次
+        if (p > 0.34) {
+          const p2 = (p - 0.34) / 0.66
+          const front2 = easeOutCubic(p2) * diag * 0.34
+          for (let k = 0; k < 3; k++) {
+            const r = front2 - k * (34 + 12 * p2)
+            if (r <= 4) continue
+            const amp = 0.20 * Math.exp(-k * 0.5) * (1 - p2) * 0.8
+            if (amp <= 0.004) continue
+            ringPath(o.x, o.y, r, k * 2.3 + 1.1, 0.016)
+            ctx.strokeStyle = `rgba(${INK},${amp})`
+            ctx.lineWidth = 3
+            ctx.stroke()
+          }
+        }
+
+        // 1b-3. 溅起的水珠：入水后头 0.9 秒里往外抛的小墨点（抛物线：先升后落）
+        if (el < 900) {
+          const q = el / 900
+          for (let i = 0; i < 16; i++) {
+            const a = i * 2.399 + 0.7
+            const d = 30 + easeOutCubic(q) * (150 + (i % 5) * 34)
+            const lift = Math.sin(q * Math.PI) * (26 + (i % 4) * 9)
+            ctx.fillStyle = `rgba(${INK},${0.30 * (1 - q)})`
+            ctx.beginPath()
+            ctx.arc(o.x + Math.cos(a) * d, o.y + Math.sin(a) * d - lift, 1.6 + (i % 3) * 0.8, 0, Math.PI * 2)
+            ctx.fill()
+          }
         }
       }
 
@@ -240,34 +291,99 @@ export default function InkTransition({ lines, origin, onDone }) {
       const inkAlpha = el < T_DYE_FULL ? 1 : 1 - easeInOutCubic(clamp01((el - T_DYE_FULL) / (T_OUT_END - T_DYE_FULL)))
       canvas.style.opacity = String(clamp01(inkAlpha))
 
-      /* ---------- ④ 竹简展开 ---------- */
+      /* ---------- ④ 竹简展开（慢）+ ⑤ 卷轴边缘的淡黑墨流动 ---------- */
       const scroll = scrollRef.current
+      const open = clamp01((el - T_SCROLL_START) / (T_SCROLL_END - T_SCROLL_START))
       if (scroll) {
-        const open = clamp01((el - T_SCROLL_START) / (T_SCROLL_END - T_SCROLL_START))
-        const handed = clamp01((el - T_SCROLL_END) / (T_SCROLL_FADE - T_SCROLL_END)) // 交给真正的页面
-        // 从中间向两侧展开（scaleX 0.04 → 1），展开完成后淡出，让详情页的竹简接上
+        // 从中间向两侧展开（scaleX 0.04 → 1）。
+        // **全程不透明** —— 之前写成 open × opacity，展开时整个卷轴是半透明的，
+        // 底下的详情页一路透出来，这正是「动画还没结束就看到详情页」的原因。
+        // **展开完成后保持占满，不提前交棒**；只在墨起盖到峰值之后、墨还盖着时淡出。
         scroll.style.transform = `scaleX(${(0.04 + 0.96 * easeOutCubic(open)).toFixed(4)})`
-        scroll.style.opacity = String((open * (1 - handed)).toFixed(3))
+        const scrollFade = clamp01((el - T_WASH_PEAK) / 320)
+        scroll.style.opacity = String((1 - scrollFade).toFixed(3))
       }
 
-      /* ---------- ⑤ 内容以「墨起」浮现 ---------- */
-      // 墨涌上来（4700→5050）再退去（5050→5850），退去的过程中底下的内容一点点显出来
+      // 边缘淡墨：贴着卷轴两条正在外推的边，往下淌。画在卷轴**之上**的独立画布里
+      if (ectx) {
+        const edgeA =
+          clamp01((el - T_EDGE_START) / 520) *
+          (1 - easeInOutCubic(clamp01((el - T_SCROLL_END) / (T_EDGE_END - T_SCROLL_END))))
+        ectx.clearRect(0, 0, W, H)
+        if (edgeA > 0.004) {
+          const halfW = (0.04 + 0.96 * easeOutCubic(open)) * W / 2
+          const ex = [W / 2 - halfW, W / 2 + halfW]
+          const BW = 200
+          for (let e = 0; e < 2; e++) {
+            // 墨浓在**卷轴内侧**（竹片吸墨，从展开边往里洇）；
+            // 外侧几乎不画 —— 外面是深色木桌面，墨画上去等于没画
+            const dir = e === 0 ? 1 : -1
+            const a = edgeA * 0.72
+            const xa = ex[e] - dir * 6            // 外侧（桌面）一点点
+            const xb = ex[e] + dir * BW           // 内侧（卷轴深处）
+            const x0 = Math.min(xa, xb)
+            const x1 = Math.max(xa, xb)
+            const pEdge = (ex[e] - x0) / (x1 - x0)  // 卷轴边在渐变里的位置
+            const g = ectx.createLinearGradient(x0, 0, x1, 0)
+            g.addColorStop(0, `rgba(${INK},0)`)                       // 桌面：不画
+            g.addColorStop(pEdge, `rgba(${INK},${a})`)                // 贴边的一线最浓
+            g.addColorStop(pEdge + (1 - pEdge) * 0.3, `rgba(${INK},${a * 0.45})`)
+            g.addColorStop(pEdge + (1 - pEdge) * 0.7, `rgba(${INK},${a * 0.16})`)
+            g.addColorStop(1, `rgba(${INK},0)`)                       // 卷轴深处：不画
+            ectx.fillStyle = g
+            ectx.fillRect(x0, 0, x1 - x0, H)
+            // 「流动」：三条柔边墨痕贴着边、随时间缓缓下移
+            for (let i = 0; i < 5; i++) {
+              const off = ((el * (0.016 + i * 0.005) + i * 230) % (H + 360)) - 180
+              const gx = ex[e] + dir * (10 + i * 31)
+              const gs = ectx.createLinearGradient(0, off - 190, 0, off + 190)
+              gs.addColorStop(0, `rgba(${INK},0)`)
+              gs.addColorStop(0.5, `rgba(${INK},${a * 0.5})`)
+              gs.addColorStop(1, `rgba(${INK},0)`)
+              ectx.fillStyle = gs
+              ectx.fillRect(Math.min(gx, gx + dir * 22), off - 190, 22, 380)
+            }
+            // 往下淌的墨滴（贴边内侧、错峰出发、到屏外循环）
+            for (let i = 0; i < 6; i++) {
+              const seed = i * 173 + e * 61
+              const t = el - T_EDGE_START - (i % 4) * 260
+              if (t <= 0) continue
+              const y = ((t * (0.026 + (i % 3) * 0.011)) % (H + 240)) - 120
+              const x = ex[e] + dir * (6 + (i % 3) * 11)
+              const da = edgeA * (0.34 + 0.2 * Math.sin(seed * 2))
+              const len = 40 + (i % 3) * 26
+              const g2 = ectx.createLinearGradient(x, y - len, x, y)
+              g2.addColorStop(0, `rgba(${INK},0)`)
+              g2.addColorStop(1, `rgba(${INK},${da})`)
+              ectx.fillStyle = g2
+              ectx.fillRect(x - 2.2, y - len, 4.4, len)
+            }
+          }
+        }
+      }
+
+      /* ---------- ⑥ 最后一层墨起：盖住「卷轴 → 详情页」的交接 ---------- */
+      // 6600 涌上来 → 7000 盖到峰值（此刻底下的详情页换上来，但屏幕几乎全墨）→ 退去时才显出来
       const washP =
         clamp01((el - T_WASH_START) / (T_WASH_PEAK - T_WASH_START)) *
         (1 - clamp01((el - T_WASH_PEAK) / (T_WASH_END - T_WASH_PEAK)))
       const washEl = washRef.current
-      if (washEl) washEl.style.opacity = String((washP * 0.92).toFixed(3))
+      if (washEl) washEl.style.opacity = String((washP * 0.95).toFixed(3))
 
-      /* ---------- 模糊与压暗（值已量化：不变就不触发整页重栅格化，更顺） ---------- */
+      /* ---------- 模糊与压暗 ----------
+         页面透明度：整段转场都压在 0.15（暗到认不出内容），
+         只在最后一拍（墨起退去）随墨一起亮起来 —— 这样卷轴展开时不会露出详情页。
+         模糊同理：卷轴展开期间保底 6px，最后一拍才放开。 */
+      const revealP = clamp01((el - T_WASH_PEAK) / (T_WASH_END - T_WASH_PEAK))
+      const dim = PAGE_DIM + (1 - PAGE_DIM) * revealP
+      root.style.setProperty('--ink-dim', String(Math.round(dim * 50) / 50))
+
       const dyeBlur =
         el < T_DYE_FULL
           ? BLUR_PEAK * easeOutCubic(clamp01((el - T_DYE_START) / (T_DYE_FULL - T_DYE_START - 500)))
           : BLUR_PEAK * (1 - easeInOutCubic(clamp01((el - T_DYE_FULL) / (T_OUT_END - T_DYE_FULL))))
-      const blur = Math.max(0, dyeBlur) + BLUR_EMERGE * washP
+      const blur = Math.max(0, dyeBlur, HOLD_BLUR * (1 - revealP)) + BLUR_EMERGE * washP
       root.style.setProperty('--ink-blur', `${(Math.round(blur * 4) / 4).toFixed(2)}px`)
-
-      const dim = PAGE_DIM + (1 - PAGE_DIM) * (1 - washP)
-      root.style.setProperty('--ink-dim', String(Math.round(dim * 50) / 50))
 
       if (el >= T_DONE) {
         root.classList.remove('ink-transitioning')
@@ -297,7 +413,9 @@ export default function InkTransition({ lines, origin, onDone }) {
       <canvas ref={canvasRef} className="ink-trans-canvas" />
       {/* 竹简：从中间向两侧展开，占满屏幕 */}
       <div ref={scrollRef} className="ink-trans-scroll" />
-      {/* 墨起：内容浮现前涌上来的那层墨 */}
+      {/* 卷轴边缘的淡黑墨（画在卷轴之上，压住竹简边并往外洇开） */}
+      <canvas ref={edgeRef} className="ink-trans-edge" />
+      {/* 墨起：最后一层墨，盖住「卷轴 → 详情页」的交接 */}
       <div ref={washRef} className="ink-trans-wash" />
     </div>
   )

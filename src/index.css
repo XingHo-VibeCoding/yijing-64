@@ -783,3 +783,54 @@ body {
   border-style: dashed;
   cursor: not-allowed;
 }
+
+/* ============================================================
+   Day 9 追加 · 转场修订 + 木牌「真木纹」
+   （原来的 92° 细密交叉纹是「布纹」，不是木纹 —— 木纹是顺纹长条）
+   ============================================================ */
+
+/* 转场：卷轴边缘的淡黑墨（画在卷轴之上的独立画布） */
+.ink-trans-edge { position: absolute; inset: 0; pointer-events: none; }
+
+/* 木纹配方：横向生长轮 + 宽色带 + 两条极淡深纹（顺纹，一个方向） */
+:root {
+  --wood-grain:
+    repeating-linear-gradient(179deg,
+      rgba(0,0,0,.20) 0 1px, rgba(0,0,0,0) 1px 4px,
+      rgba(255,215,160,.055) 4px 7px, rgba(0,0,0,0) 7px 12px),
+    repeating-linear-gradient(181deg,
+      rgba(0,0,0,.12) 0 3px, rgba(0,0,0,0) 3px 15px,
+      rgba(255,215,160,.045) 15px 18px, rgba(0,0,0,0) 18px 27px),
+    repeating-linear-gradient(180deg,
+      rgba(18,9,2,.20) 0 1px, rgba(0,0,0,0) 1px 51px),
+    repeating-linear-gradient(184deg,
+      rgba(255,220,170,.06) 0 9px, rgba(0,0,0,0) 9px 33px);
+}
+
+/* 卦牌：宣纸高光 + 木纹（每 4 块里有两块带木节，位置错开免得千篇一律） */
+.item {
+  background-image:
+    linear-gradient(180deg, rgba(255,225,175,.13), rgba(0,0,0,0) 42%),
+    var(--wood-grain);
+}
+.list li:nth-child(4n+1) .item {
+  background-image:
+    linear-gradient(180deg, rgba(255,225,175,.13), rgba(0,0,0,0) 42%),
+    radial-gradient(ellipse 15px 8px at 16% 64%,
+      rgba(12,5,0,.42), rgba(70,40,14,.24) 42%, rgba(0,0,0,0) 72%),
+    var(--wood-grain);
+}
+.list li:nth-child(4n+3) .item {
+  background-image:
+    linear-gradient(180deg, rgba(255,225,175,.13), rgba(0,0,0,0) 42%),
+    radial-gradient(ellipse 13px 7px at 79% 30%,
+      rgba(12,5,0,.36), rgba(70,40,14,.20) 44%, rgba(0,0,0,0) 72%),
+    var(--wood-grain);
+}
+
+/* 起卦入口：同一套木纹（它是总表上另一块木匾） */
+.cast-cta {
+  background-image:
+    linear-gradient(180deg, rgba(255,225,175,.10), rgba(0,0,0,0) 42%),
+    var(--wood-grain);
+}
