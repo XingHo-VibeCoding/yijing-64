@@ -13,23 +13,24 @@ import { makeDotTexture } from './CastingAnimation.jsx'
  */
 const INK = '22,19,17'
 
-/* 时间轴（v3：涟漪更慢更有诗意 / 卷轴展开放慢 / 最后一拍才交接详情页）
+/* 时间轴（v4：卷轴随墨散浮现 / clip 展开不压扁纹理 / 轴杆立体）
    涟漪 0–2000 → 墨侵染 700–3600 → 墨散 3600–4600
-   → 卷轴展开 4400–6600（2.2 秒，慢）→ 边缘墨流 4600–7000
-   → 最后一层墨起 6600–7800：把「卷轴 → 详情页」的交接盖住，**这一拍之前绝不露出详情页** */
+   → 卷好的竹简 3850 起随墨散淡入，4500 才开始展开（2.2 秒，慢）→ 边缘墨流 4700–7200
+   → 最后一层墨起 6700–7900：把「卷轴 → 详情页」的交接盖住，**这一拍之前绝不露出详情页** */
 const T_RIPPLE_END = 2000     // ① 涟漪（石头入水：冲击 → 波列推开 → 水珠）
 const T_DYE_START = 700       // ② 墨开始侵染
 const T_DYE_FULL = 3600       //    基本铺满（此时遮挡最完全）
 const T_FLOOD_START = 2200    //    整片淹没的起点：把墨点之间的缝合上
 const T_OUT_END = 4600        // ③ 墨散尽
-const T_SCROLL_START = 4400   // ④ 竹简开始展开（与墨散略有重叠，接得上）
-const T_SCROLL_END = 6600     //    展开到占满屏幕（2.2 秒 —— 慢）
-const T_EDGE_START = 4600     //    卷轴边缘的淡黑墨开始沿边往下淌
-const T_EDGE_END = 7100       //    墨流随展开推进、渐淡收尾
-const T_WASH_START = 6600     // ⑤ 最后一层墨（墨起）：盖住「卷轴 → 详情页」的交接
-const T_WASH_PEAK = 7000      //    峰值时屏幕几乎全墨 —— 此刻才允许底下的详情页换上来
-const T_WASH_END = 7800       //    墨退去，详情页这一拍才显出来
-const T_DONE = 7900
+const T_SC_APPEAR = 3850      // ④ 卷好的竹简**随墨散浮现**（墨散 3600–4600，正好这一段淡入）
+const T_SCROLL_START = 4500   //    墨将散尽才开始展开（2.2 秒 —— 慢）
+const T_SCROLL_END = 6700     //    展开到占满屏幕
+const T_EDGE_START = 4700     //    卷轴边缘的淡黑墨开始沿边往下淌
+const T_EDGE_END = 7200       //    墨流随展开推进、渐淡收尾
+const T_WASH_START = 6700     // ⑤ 最后一层墨（墨起）：盖住「卷轴 → 详情页」的交接
+const T_WASH_PEAK = 7100      //    峰值时屏幕几乎全墨 —— 此刻才允许底下的详情页换上来
+const T_WASH_END = 7900       //    墨退去，详情页这一拍才显出来
+const T_DONE = 8000
 
 const BLUR_PEAK = 10          // 墨侵染期的峰值模糊（px）
 const BLUR_EMERGE = 8         // 墨起时的模糊（px）
@@ -79,6 +80,8 @@ function makeRays(w, h, origin) {
 
 /** 墨痕落点的间距（px）：按距离落而不是按帧落，密度才与帧率 / 定格 / 慢放无关 */
 const SPACING = 9
+/** 卷轴轴杆宽（px）：与 CSS `.ink-trans-roll` 的 width 保持一致 */
+const ROLL_W = 30
 /** 圆心留白半径：这一圈交给水渍渐变（否则所有射线都从点击点出发，圆心会瞬间叠成一团黑） */
 const R0 = 120
 
@@ -86,6 +89,8 @@ export default function InkTransition({ lines, origin, onDone }) {
   const canvasRef = useRef(null)
   const edgeRef = useRef(null)      // 卷轴边缘的淡墨（画在卷轴**之上**，才能压住竹简边）
   const scrollRef = useRef(null)
+  const rollLRef = useRef(null)     // 左轴杆（立体感：圆柱明暗 + 轴头）
+  const rollRRef = useRef(null)     // 右轴杆
   const washRef = useRef(null)
 
   useEffect(() => {
@@ -291,17 +296,34 @@ export default function InkTransition({ lines, origin, onDone }) {
       const inkAlpha = el < T_DYE_FULL ? 1 : 1 - easeInOutCubic(clamp01((el - T_DYE_FULL) / (T_OUT_END - T_DYE_FULL)))
       canvas.style.opacity = String(clamp01(inkAlpha))
 
-      /* ---------- ④ 竹简展开（慢）+ ⑤ 卷轴边缘的淡黑墨流动 ---------- */
+      /* ---------- ④ 竹简（墨散时浮现 → 慢慢展开）+ ⑤ 卷轴边缘的淡黑墨流动 ---------- */
       const scroll = scrollRef.current
       const open = clamp01((el - T_SCROLL_START) / (T_SCROLL_END - T_SCROLL_START))
+      const openE = easeOutCubic(open)
+      // 出现时机：**墨散（3600–4600）时才淡入**。之前 opacity 每帧都被写成 1，
+      // 一条 4% 宽的细缝从第 0 帧就立在屏幕中央 —— 这正是「竹简出现太早」的原因
+      const appearP = clamp01((el - T_SC_APPEAR) / 550)
+      const scrollFade = clamp01((el - T_WASH_PEAK) / 320)
+      const scOp = appearP * (1 - scrollFade)
+      // 展开宽度：clip-path 从中间向两侧**揭开**（不用 scaleX —— 那会把竹片纹理横向
+      // 压扁再拉宽，看起来是「拉贴图」而不是「展卷」）。未展开时也露出约 28px 的卷着部分
+      const minHalf = (14 / W) * 100
+      const halfFrac = Math.min(Math.max(openE * 50, Math.min(minHalf, 50)), 50)
+      const halfW = (halfFrac / 100) * W
+      const inset = (50 - halfFrac).toFixed(3)
       if (scroll) {
-        // 从中间向两侧展开（scaleX 0.04 → 1）。
-        // **全程不透明** —— 之前写成 open × opacity，展开时整个卷轴是半透明的，
-        // 底下的详情页一路透出来，这正是「动画还没结束就看到详情页」的原因。
-        // **展开完成后保持占满，不提前交棒**；只在墨起盖到峰值之后、墨还盖着时淡出。
-        scroll.style.transform = `scaleX(${(0.04 + 0.96 * easeOutCubic(open)).toFixed(4)})`
-        const scrollFade = clamp01((el - T_WASH_PEAK) / 320)
-        scroll.style.opacity = String((1 - scrollFade).toFixed(3))
+        scroll.style.clipPath = `inset(0 ${inset}% 0 ${inset}%)`
+        // **全程不透明**（透明度只管「出现/收尾」，展开期间恒为 1）——
+        // 半透明会让底下的详情页透出来；展开完成后保持占满，不提前交棒
+        scroll.style.opacity = scOp.toFixed(3)
+      }
+
+      // 两根卷轴贴着展开边、随展开往外推（滚动到哪，轴就在哪 —— 立体感的锚点）
+      if (rollLRef.current && rollRRef.current) {
+        rollLRef.current.style.transform = `translateX(${(W / 2 - halfW - ROLL_W / 2).toFixed(1)}px)`
+        rollRRef.current.style.transform = `translateX(${(W / 2 + halfW - ROLL_W / 2).toFixed(1)}px)`
+        rollLRef.current.style.opacity = scOp.toFixed(3)
+        rollRRef.current.style.opacity = scOp.toFixed(3)
       }
 
       // 边缘淡墨：贴着卷轴两条正在外推的边，往下淌。画在卷轴**之上**的独立画布里
@@ -311,7 +333,6 @@ export default function InkTransition({ lines, origin, onDone }) {
           (1 - easeInOutCubic(clamp01((el - T_SCROLL_END) / (T_EDGE_END - T_SCROLL_END))))
         ectx.clearRect(0, 0, W, H)
         if (edgeA > 0.004) {
-          const halfW = (0.04 + 0.96 * easeOutCubic(open)) * W / 2
           const ex = [W / 2 - halfW, W / 2 + halfW]
           const BW = 200
           for (let e = 0; e < 2; e++) {
@@ -411,8 +432,11 @@ export default function InkTransition({ lines, origin, onDone }) {
   return (
     <div className="ink-trans" role="presentation">
       <canvas ref={canvasRef} className="ink-trans-canvas" />
-      {/* 竹简：从中间向两侧展开，占满屏幕 */}
+      {/* 竹简：从中间向两侧揭开，占满屏幕 */}
       <div ref={scrollRef} className="ink-trans-scroll" />
+      {/* 两根卷轴（圆柱轴杆 + 上下轴头，贴着展开边往外推 —— 立体感的锚点） */}
+      <div ref={rollLRef} className="ink-trans-roll" />
+      <div ref={rollRRef} className="ink-trans-roll" />
       {/* 卷轴边缘的淡黑墨（画在卷轴之上，压住竹简边并往外洇开） */}
       <canvas ref={edgeRef} className="ink-trans-edge" />
       {/* 墨起：最后一层墨，盖住「卷轴 → 详情页」的交接 */}
