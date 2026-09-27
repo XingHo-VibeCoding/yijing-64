@@ -138,19 +138,50 @@ export default function App() {
   }
 
   /**
-   * 从总表进详情：先放一段「涟漪 → 墨侵染 → 墨散 → 卦象浮现 → 归位」的转场。
-   * 起点取鼠标位置；**键盘回车触发时没有鼠标坐标**，改用被点那一行的中心（否则涟漪会从左上角冒出来）。
+   * 进入详情的墨侵染转场（总表点卦、结果页「读这一卦的全卦」都走这一条）。
+   * 起点取鼠标位置；**键盘回车触发时没有鼠标坐标**，改用被点元素的中心（否则涟漪会从左上角冒出来）。
+   * ⚠️ 这里**不换页** —— 涟漪必须打在当前界面上；换页动作在墨盖满屏幕的一瞬
+   * 由 InkTransition 回调 onCovered 触发（handleCovered），墨散后露出的已经是下一界面。
    */
-  const startTransition = (id, e) => {
-    const hasPointer = Number.isFinite(e.clientX) && (e.clientX !== 0 || e.clientY !== 0)
-    const rect = e.currentTarget.getBoundingClientRect()
-    setTransition({
-      id,
-      x: hasPointer ? e.clientX : rect.left + rect.width / 2,
-      y: hasPointer ? e.clientY : rect.top + rect.height / 2,
-    })
-    openDetail(id, 'list')
+  const startTransition = (id, e, fromCast = false) => {
+    if (transition) return // 转场进行中忽略新的点击
+    const hasPointer = e && Number.isFinite(e.clientX) && (e.clientX !== 0 || e.clientY !== 0)
+    let x = window.innerWidth / 2
+    let y = window.innerHeight / 2
+    if (e) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      x = hasPointer ? e.clientX : rect.left + rect.width / 2
+      y = hasPointer ? e.clientY : rect.top + rect.height / 2
+    }
+    setTransition({ id, x, y, fromCast })
   }
+
+  /* 墨盖满屏幕的一瞬：在墨底下换页（当前界面 → 详情页），用户看不见这一下 */
+  const handleCovered = () => {
+    if (!transition) return
+    if (transition.fromCast) setCasting(null)
+    openDetail(transition.id, 'list')
+  }
+
+  /* ---------- 转场层（App 顶层唯一实例）----------
+     必须挂在**所有视图分支之外**：分支切换时 React 按位置对账，位置变了就等于重挂载，
+     动画会从 0 重播。portal 到 body 不受 .page 上 filter 的影响（filter 会把 fixed
+     的定位基准从视口改成页面本身）。 */
+  const overlay = transition
+    ? createPortal(
+        <InkTransition
+          key={transition.id}
+          lines={data.items.find((h) => h.id === transition.id)?.lines || []}
+          origin={{ x: transition.x, y: transition.y }}
+          onCovered={handleCovered}
+          onDone={() => setTransition(null)}
+        />,
+        document.body
+      )
+    : null
+
+  /* 各视图分支只负责给出 viewNode，统一在函数末尾与转场层一起返回 */
+  let viewNode = null
 
   /**
    * F1 交互：列表里用 ↑ / ↓ 在卦之间移动焦点，回车即进入（`<button>` 原生支持 Enter / Space）。
@@ -170,7 +201,7 @@ export default function App() {
   /* ---------- 起卦流程（动画 + 结果页） ---------- */
   if (casting) {
     const target = data.items.find((h) => h.id === casting.id)
-    return (
+    viewNode = (
       <CastingAnimation
         key={castSeq}
         result={target}
@@ -189,10 +220,7 @@ export default function App() {
           setHighlightId(id)
           go('#/')
         }}
-        onEnterDetail={(id) => {
-          setCasting(null)
-          openDetail(id, 'list')
-        }}
+        onEnterDetail={(id, e) => startTransition(id, e, true)}
       />
     )
   }
@@ -207,7 +235,7 @@ export default function App() {
     const prevHex = data.items.find((h) => h.id === current.id - 1) || null
     const nextHex = data.items.find((h) => h.id === current.id + 1) || null
 
-    return (
+    viewNode = (
       // 详情页 = 竹简记录（.page-slips 覆盖成竹简质地）
       <main className="page page-slips">
         <div className="detail-bar">
@@ -336,27 +364,13 @@ export default function App() {
           </p>
           <SourceTag kind="ours" note="这是本项目按卦辞整体处境作出的判定，不作未来断言" />
         </section>
-
-        {/* 从总表点进来的那一次，走「涟漪 → 墨侵染 → 墨散 → 卦象浮现 → 归位」的转场。
-            ⚠️ 必须用 portal 挂到 body 下：`.page` 上的 filter 会把 fixed 的定位基准
-            从视口改成页面本身（转场层会被卷进页面坐标，「屏幕中央」变成「整页中央」） */}
-        {transition &&
-          createPortal(
-            <InkTransition
-              key={transition.id}
-              lines={data.items.find((h) => h.id === transition.id)?.lines || []}
-              origin={{ x: transition.x, y: transition.y }}
-              onDone={() => setTransition(null)}
-            />,
-            document.body
-          )}
       </main>
     )
   }
 
   /* ---------- F3 记忆测验 ---------- */
   if (view === 'quiz') {
-    return (
+    viewNode = (
       <Quiz
         onOpenDetail={(id) => openDetail(id, 'list')}
         onBack={() => {
@@ -369,7 +383,7 @@ export default function App() {
 
   /* ---------- F8 过往起卦记录 ---------- */
   if (view === 'records') {
-    return (
+    viewNode = (
       <Records
         records={records}
         favorites={favorites}
@@ -391,9 +405,10 @@ export default function App() {
     )
   }
 
-  /* ---------- 卦象爻辞总表（四种页面状态：加载 / 空 / 错误 / 成功） ---------- */
-
-  return (
+  /* ---------- 卦象爻辞总表（四种页面状态：加载 / 空 / 错误 / 成功） ----------
+     ⚠️ 兜底分支：前面所有分支都没命中才轮到它 —— 无条件赋值会把详情页覆盖回列表 */
+  if (viewNode === null)
+    viewNode = (
     <main className="page">
       <header className="head">
         <h1>易经六十四卦学习</h1>
@@ -525,5 +540,13 @@ export default function App() {
         </>
       )}
     </main>
+  )
+
+  /* ---------- 唯一的返回：视图 + 转场层（转场层位置稳定，动画才不会因分支切换重播） ---------- */
+  return (
+    <>
+      {viewNode}
+      {overlay}
+    </>
   )
 }

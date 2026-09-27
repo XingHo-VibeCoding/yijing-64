@@ -194,8 +194,8 @@ export default function CastResult({
               <SourceTag kind="ours" note="上面这段是本项目的理解，不是《周易》里的话" />
             </section>
 
-            {/* ── 去读全卦：把好奇导向学习 ── */}
-            <button type="button" className="cr-btn cr-btn-wide" onClick={onEnterDetail}>
+            {/* ── 去读全卦：把好奇导向学习（把点击坐标带给转场，涟漪从按钮上冒出来） ── */}
+            <button type="button" className="cr-btn cr-btn-wide" onClick={(e) => onEnterDetail(e)}>
               读这一卦的全卦 →
             </button>
           </div>

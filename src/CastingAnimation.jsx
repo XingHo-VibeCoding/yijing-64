@@ -501,7 +501,7 @@ export default function CastingAnimation({
           onFocusLine={handleFocus}
           focusing={focusing}
           onEnterList={() => onEnterList && onEnterList(result.id)}
-          onEnterDetail={() => onEnterDetail && onEnterDetail(result.id)}
+          onEnterDetail={(e) => onEnterDetail && onEnterDetail(result.id, e)}
         />
       )}
     </div>

@@ -32,7 +32,6 @@ const T_WASH_PEAK = 7100      //    峰值时屏幕几乎全墨 —— 此刻才
 const T_WASH_END = 7900       //    墨退去，详情页这一拍才显出来
 const T_DONE = 8000
 
-const BLUR_PEAK = 10          // 墨侵染期的峰值模糊（px）
 const BLUR_EMERGE = 8         // 墨起时的模糊（px）
 const PAGE_DIM = 0.15         // 转场全程，底下内容压暗到多少（这一档才叫「看不见」）
 const HOLD_BLUR = 6           // 卷轴展开期间保持的模糊（px）—— 不糊的话详情页还是能被认出来
@@ -85,13 +84,19 @@ const ROLL_W = 30
 /** 圆心留白半径：这一圈交给水渍渐变（否则所有射线都从点击点出发，圆心会瞬间叠成一团黑） */
 const R0 = 120
 
-export default function InkTransition({ lines, origin, onDone }) {
+export default function InkTransition({ lines, origin, onDone, onCovered }) {
   const canvasRef = useRef(null)
   const edgeRef = useRef(null)      // 卷轴边缘的淡墨（画在卷轴**之上**，才能压住竹简边）
   const scrollRef = useRef(null)
   const rollLRef = useRef(null)     // 左轴杆（立体感：圆柱明暗 + 轴头）
   const rollRRef = useRef(null)     // 右轴杆
   const washRef = useRef(null)
+
+  /* 回调走 latest-ref：墨盖满时外层会换页引发重渲染，
+     若把回调直接挂进 effect 依赖，转场动画会从 0 重播 */
+  const cbRef = useRef({})
+  cbRef.current.onDone = onDone
+  cbRef.current.onCovered = onCovered
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -137,10 +142,9 @@ export default function InkTransition({ lines, origin, onDone }) {
     const start = performance.now()
     let raf = 0
 
-    /* 详情页刚挂载时先把滚动位置归到顶（趁墨盖着屏幕，用户看不见） */
-    setTimeout(() => {
-      window.scrollTo(0, 0)
-    }, 420)
+    /* 换页时机 = 墨盖满屏幕的一瞬（一次性事件，用 latch 通知外层）；
+       滚动位置也在此刻归零 —— 涟漪阶段屏幕上还是**当前界面**，提前归零会被看见 */
+    let covered = false
 
     const loop = (now) => {
       const el = FREEZE != null ? FREEZE : (now - start) * SPEED
@@ -181,6 +185,8 @@ export default function InkTransition({ lines, origin, onDone }) {
         }
 
         // 1b. 波列：一圈圈向外推开。越往外波长越大（色散）、振幅越小（1/√r 量级）
+        //     立体感三件套：① 波峰在水面上投下的软影（往下偏移）② 波峰竖向柱面明暗
+        //     （顶部受光亮、底部背光沉）③ 只画在受光弧上的镜面反光
         const front = (1 - Math.pow(1 - p, 2.2)) * diag * 0.62
         const CRESTS = 9
         for (let k = 0; k < CRESTS; k++) {
@@ -190,15 +196,37 @@ export default function InkTransition({ lines, origin, onDone }) {
           const amp = 0.46 * Math.exp(-k * 0.40) * (1 - p) * (r / Math.max(1, front))
           if (amp <= 0.004) continue
           const phase = k * 1.7 + p * 2.4
+
+          // ① 波峰投在水面上的影：整环往下压一点、更宽更淡 —— 环才不是贴在纸上的线圈
+          ctx.save()
+          ctx.translate(0, 6 + k * 0.5)
+          ringPath(o.x, o.y, r, phase, 0.012)
+          ctx.strokeStyle = `rgba(${INK},${amp * 0.32})`
+          ctx.lineWidth = 11
+          ctx.stroke()
+          ctx.restore()
+
+          // ② 波峰外侧的柔边：水的厚度
           ringPath(o.x, o.y, r, phase, 0.012)
           ctx.strokeStyle = `rgba(${INK},${amp * 0.30})`
-          ctx.lineWidth = 15 // 外柔边：水的厚度
+          ctx.lineWidth = 15
           ctx.stroke()
-          ctx.strokeStyle = `rgba(${INK},${amp})`
-          ctx.lineWidth = 4 // 波峰
+
+          // ③ 波峰本体：竖向线性渐变（环顶受天光发亮、环底背光更沉）—— 柱面明暗
+          const gRing = ctx.createLinearGradient(0, o.y - r - 20, 0, o.y + r + 20)
+          gRing.addColorStop(0, `rgba(255,252,245,${amp * 0.5})`)
+          gRing.addColorStop(0.35, `rgba(${INK},${amp})`)
+          gRing.addColorStop(1, `rgba(${INK},${Math.min(1, amp * 1.3)})`)
+          ringPath(o.x, o.y, r, phase, 0.012)
+          ctx.strokeStyle = gRing
+          ctx.lineWidth = 4
           ctx.stroke()
-          ctx.strokeStyle = `rgba(255,255,255,${amp * 0.5})`
-          ctx.lineWidth = 1.4 // 水面反光
+
+          // ④ 镜面反光只落在受光弧（环顶那一小段），不再整圈刷白
+          ctx.beginPath()
+          ctx.arc(o.x, o.y, r, -2.5, -0.6)
+          ctx.strokeStyle = `rgba(255,255,255,${amp * 0.6})`
+          ctx.lineWidth = 1.6
           ctx.stroke()
         }
 
@@ -296,6 +324,13 @@ export default function InkTransition({ lines, origin, onDone }) {
       const inkAlpha = el < T_DYE_FULL ? 1 : 1 - easeInOutCubic(clamp01((el - T_DYE_FULL) / (T_OUT_END - T_DYE_FULL)))
       canvas.style.opacity = String(clamp01(inkAlpha))
 
+      /* ---------- 墨盖满屏幕的一瞬 → 通知外层换页（藏在墨底下，用户看不见） ---------- */
+      if (!covered && el >= T_DYE_FULL) {
+        covered = true
+        window.scrollTo(0, 0)
+        cbRef.current.onCovered && cbRef.current.onCovered()
+      }
+
       /* ---------- ④ 竹简（墨散时浮现 → 慢慢展开）+ ⑤ 卷轴边缘的淡黑墨流动 ---------- */
       const scroll = scrollRef.current
       const open = clamp01((el - T_SCROLL_START) / (T_SCROLL_END - T_SCROLL_START))
@@ -392,25 +427,23 @@ export default function InkTransition({ lines, origin, onDone }) {
       if (washEl) washEl.style.opacity = String((washP * 0.95).toFixed(3))
 
       /* ---------- 模糊与压暗 ----------
-         页面透明度：整段转场都压在 0.15（暗到认不出内容），
-         只在最后一拍（墨起退去）随墨一起亮起来 —— 这样卷轴展开时不会露出详情页。
-         模糊同理：卷轴展开期间保底 6px，最后一拍才放开。 */
+         涟漪 + 侵染前段：**当前界面保持原样**（涟漪打在真页面上，遮挡交给墨迹本身）；
+         整片淹没起（T_FLOOD_START）才随进度压暗 + 模糊，盖满时 0.15 / 6px —— 换页藏在这后面；
+         最后一拍（墨起退去）随墨一起亮起来。 */
       const revealP = clamp01((el - T_WASH_PEAK) / (T_WASH_END - T_WASH_PEAK))
-      const dim = PAGE_DIM + (1 - PAGE_DIM) * revealP
+      const coverRamp = easeInOutCubic(clamp01((el - T_FLOOD_START) / (T_DYE_FULL - T_FLOOD_START)))
+      /* 页面透明度：涟漪期 1（当前界面完整可见）→ 盖满时 0.15 → 最后一拍回 1 */
+      const dim = 1 - (1 - PAGE_DIM) * coverRamp * (1 - revealP)
       root.style.setProperty('--ink-dim', String(Math.round(dim * 50) / 50))
 
-      const dyeBlur =
-        el < T_DYE_FULL
-          ? BLUR_PEAK * easeOutCubic(clamp01((el - T_DYE_START) / (T_DYE_FULL - T_DYE_START - 500)))
-          : BLUR_PEAK * (1 - easeInOutCubic(clamp01((el - T_DYE_FULL) / (T_OUT_END - T_DYE_FULL))))
-      const blur = Math.max(0, dyeBlur, HOLD_BLUR * (1 - revealP)) + BLUR_EMERGE * washP
+      const blur = HOLD_BLUR * coverRamp * (1 - revealP) + BLUR_EMERGE * washP
       root.style.setProperty('--ink-blur', `${(Math.round(blur * 4) / 4).toFixed(2)}px`)
 
       if (el >= T_DONE) {
         root.classList.remove('ink-transitioning')
         root.style.removeProperty('--ink-blur')
         root.style.removeProperty('--ink-dim')
-        onDone && onDone()
+        cbRef.current.onDone && cbRef.current.onDone()
         return
       }
       raf = requestAnimationFrame(loop)
@@ -427,7 +460,7 @@ export default function InkTransition({ lines, origin, onDone }) {
       root.style.removeProperty('--ink-blur')
       root.style.removeProperty('--ink-dim')
     }
-  }, [lines, origin, onDone])
+  }, [lines, origin && origin.x, origin && origin.y])
 
   return (
     <div className="ink-trans" role="presentation">
