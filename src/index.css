@@ -911,6 +911,9 @@ body {
     linear-gradient(180deg, rgba(255, 225, 175, .13), rgba(0, 0, 0, 0) 42%),
     var(--wood-grain);
   box-shadow:
+    /* 银框压住木面的接缝：贴框 1px 深缝 + 6px 阴影向内晕开（木是「嵌」进去的） */
+    inset 0 0 0 2px rgba(12, 6, 1, .55),
+    inset 0 0 6px 2px rgba(0, 0, 0, .4),
     inset 0 2px 4px rgba(0, 0, 0, .52),
     inset 0 -2px 3px rgba(255, 228, 180, .13),
     inset 3px 0 6px rgba(0, 0, 0, .26),
@@ -948,7 +951,8 @@ body {
   /* 内外两道细框线：把环带收在中间，像雕花银器的外缘线 */
   --frame: rgba(46, 50, 56, .78);
   box-shadow:
-    inset 0 0 0 1px var(--frame),
+    inset 0 0 0 1px rgba(255, 255, 255, .92),   /* 金属内缘的卷边亮棱 */
+    inset 0 0 0 2px rgba(56, 61, 68, .6),       /* 亮棱外侧的座线 */
     0 0 0 1px var(--frame);
 }
 
