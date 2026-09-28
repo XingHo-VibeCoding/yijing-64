@@ -8,6 +8,7 @@ import Records from './Records.jsx'
 import Quiz from './Quiz.jsx'
 import SourceTag from './SourceTag.jsx'
 import InkTransition from './InkTransition.jsx'
+import MistTransition from './MistTransition.jsx'
 import * as store from './storage.js'
 import { fetchHexagrams, mockMode } from './mockApi.js'
 
@@ -172,6 +173,17 @@ export default function App() {
     if (!transition) return
     if (transition.fromCast) setCasting(null)
     openDetail(transition.id, 'list')
+  }
+
+  /* ---------- 进测验的「坠入仙境」转场（云雾 → 墨涌 → 露测验页） ---------- */
+  const [mistTrans, setMistTrans] = useState(false)
+  const startQuizTransition = () => {
+    if (transition || mistTrans) return // 一次只跑一个转场
+    setMistTrans(true)
+  }
+  const handleMistCovered = () => {
+    setView('quiz')
+    go('#/quiz')
   }
 
   /* ---------- 转场层（App 顶层唯一实例）----------
@@ -499,10 +511,7 @@ export default function App() {
         <button
           type="button"
           className="my-records"
-          onClick={() => {
-            setView('quiz')
-            go('#/quiz')
-          }}
+          onClick={startQuizTransition}
         >
           测一测
           {quizSum.answered > 0 ? (
@@ -628,10 +637,15 @@ export default function App() {
   )
 
   /* ---------- 唯一的返回：视图 + 转场层（转场层位置稳定，动画才不会因分支切换重播） ---------- */
+  const mist = mistTrans
+    ? createPortal(<MistTransition onCovered={handleMistCovered} onDone={() => setMistTrans(false)} />, document.body)
+    : null
+
   return (
     <>
       {viewNode}
       {overlay}
+      {mist}
     </>
   )
 }
