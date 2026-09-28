@@ -78,18 +78,30 @@ export function isFavorited(hexagramId) {
   return loadFavorites().some((f) => f.hexagramId === hexagramId)
 }
 
-/** @returns {boolean} 操作后的收藏状态 */
+/* 调试开关：URL 带 ?storeFail=1 时，收藏写入一律失败（用于演练失败提示，不影响起卦存档） */
+const DEBUG_STORE_FAIL =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('storeFail')
+
+/**
+ * @returns {boolean} 操作后的收藏状态
+ * @throws {Error} 写入失败时抛出（调用方负责给出可理解的提示）——
+ *                 收藏是用户主动动作，静默失败会让人以为存上了
+ */
 export function toggleFavorite(hexagramId) {
+  if (DEBUG_STORE_FAIL) throw new Error('本地存储写入失败（?storeFail=1 调试模拟）')
   const list = loadFavorites()
   const i = list.findIndex((f) => f.hexagramId === hexagramId)
+  let next
+  let on
   if (i >= 0) {
-    list.splice(i, 1)
-    write(K_FAVORITES, list)
-    return false
+    next = list.filter((f) => f.hexagramId !== hexagramId)
+    on = false
+  } else {
+    next = [...list, { hexagramId, date: todayKey() }]
+    on = true
   }
-  list.push({ hexagramId, date: todayKey() })
-  write(K_FAVORITES, list)
-  return true
+  if (!write(K_FAVORITES, next)) throw new Error('本地存储写入失败')
+  return on
 }
 
 /**

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import data from '../data/64卦.json'
 import yaoData from '../data/64卦-爻辞.json'
@@ -77,6 +77,9 @@ export default function App() {
   const favorites = store.loadFavorites()
   const quizSum = store.quizSummary()
   const current = currentId === null ? null : data.items.find((h) => h.id === currentId)
+  /* 今日第一卦的卦序号：从当日存档记录推导（没有就是 null，卡片不镶银边） */
+  const dailyId = (records.find((r) => r.date === store.todayKey()) || {}).hexagramId ?? null
+  const favSet = new Set(favorites.map((f) => f.hexagramId))
 
   /* ---------- 主视图的数据走 mock 接口（Day 8：本周不接真实 API） ----------
      数据本身就在本地 JSON 里，「成功」态内容与原来完全一致；
@@ -84,6 +87,12 @@ export default function App() {
      也是 F6 接云端时的预演 —— 到时候只换 mockApi.js 的实现，这个状态机不动。 */
   const [transition, setTransition] = useState(null) // { id, x, y } —— 点总表某一卦后的墨侵染转场
 
+  /* ---------- 总表卡片收藏（前端临时状态，走 storage.js 的本地层） ---------- */
+  const [favBusyId, setFavBusyId] = useState(null) // 正在写入收藏的卡片 id：写入期间该按钮禁用，防连点
+  const [favError, setFavError] = useState('') // 收藏失败的可理解提示，4 秒后自动消失
+  const favErrTimer = useRef(null)
+
+  /* ---------- 以下每帧从本地存储重读（bump() 触发） ---------- */
   const [list, setList] = useState({ status: 'loading', items: [], error: '' })
   const loadList = useCallback(() => {
     setList({ status: 'loading', items: [], error: '' })
@@ -198,6 +207,28 @@ export default function App() {
     target.focus()
   }
 
+  /**
+   * 总表卡片收藏：写入期间该卡片按钮禁用（250ms 防连点），失败给出可理解的提示。
+   * 收藏走 storage.js 本地层（?storeFail=1 可模拟写入失败）；成功后 bump() 让全页重读。
+   */
+  const toggleCardFav = (id) => {
+    if (favBusyId !== null) return // 上一笔还没落，忽略重复点击
+    setFavBusyId(id)
+    window.setTimeout(() => {
+      try {
+        store.toggleFavorite(id)
+        setFavError('')
+        bump()
+      } catch (err) {
+        setFavError('收藏没有保存成功：' + (err && err.message ? err.message : '本地存储不可用') + '。请重试。')
+        window.clearTimeout(favErrTimer.current)
+        favErrTimer.current = window.setTimeout(() => setFavError(''), 4000)
+      } finally {
+        setFavBusyId(null)
+      }
+    }, 250)
+  }
+
   /* ---------- 起卦流程（动画 + 结果页） ---------- */
   if (casting) {
     const target = data.items.find((h) => h.id === casting.id)
@@ -210,8 +241,12 @@ export default function App() {
         archived={casting.archived}
         favorited={favorites.some((f) => f.hexagramId === casting.id)}
         onToggleFav={() => {
-          store.toggleFavorite(casting.id)
-          bump()
+          try {
+            store.toggleFavorite(casting.id)
+            bump()
+          } catch (err) {
+            setFavError('收藏没有保存成功：' + (err && err.message ? err.message : '本地存储不可用'))
+          }
         }}
         onRecast={startCast}
         onEnterList={(id) => {
@@ -238,6 +273,11 @@ export default function App() {
     viewNode = (
       // 详情页 = 竹简记录（.page-slips 覆盖成竹简质地）
       <main className="page page-slips">
+        {favError && (
+          <p className="fav-error" role="alert">
+            {favError}
+          </p>
+        )}
         <div className="detail-bar">
           <button
             type="button"
@@ -273,8 +313,12 @@ export default function App() {
             type="button"
             className={'fav-btn' + (fav ? ' is-on' : '')}
             onClick={() => {
-              store.toggleFavorite(current.id)
-              bump()
+              try {
+                store.toggleFavorite(current.id)
+                bump()
+              } catch (err) {
+                setFavError('收藏没有保存成功：' + (err && err.message ? err.message : '本地存储不可用'))
+              }
             }}
           >
             {fav ? '★ 已收藏' : '☆ 收藏这一卦'}
@@ -384,7 +428,13 @@ export default function App() {
   /* ---------- F8 过往起卦记录 ---------- */
   if (view === 'records') {
     viewNode = (
-      <Records
+      <>
+        {favError && (
+          <p className="fav-error" role="alert">
+            {favError}
+          </p>
+        )}
+        <Records
         records={records}
         favorites={favorites}
         quizRounds={quizSum.rounds}
@@ -394,14 +444,19 @@ export default function App() {
           bump()
         }}
         onToggleFav={(id) => {
-          store.toggleFavorite(id)
-          bump()
+          try {
+            store.toggleFavorite(id)
+            bump()
+          } catch (err) {
+            setFavError('收藏没有保存成功：' + (err && err.message ? err.message : '本地存储不可用'))
+          }
         }}
         onBack={() => {
           setView('list')
           go('#/')
         }}
       />
+      </>
     )
   }
 
@@ -460,6 +515,13 @@ export default function App() {
         <p className="boundary">本页不提供占卜、预测与运势判断</p>
       </header>
 
+      {/* 收藏失败提示：页首红棕提示条，4 秒自动消失（role=alert 朗读） */}
+      {favError && (
+        <p className="fav-error" role="alert">
+          {favError}
+        </p>
+      )}
+
       {/* 加载中：骨架行。骨架屏不是装饰 —— 它告诉用户「在动，不是坏了」 */}
       {list.status === 'loading' && (
         <section className="volume" aria-busy="true">
@@ -512,7 +574,11 @@ export default function App() {
                     <li key={h.id}>
                       <button
                         type="button"
-                        className={'item' + (highlightId === h.id ? ' is-hit' : '')}
+                        className={
+                          'item' +
+                          (highlightId === h.id ? ' is-hit' : '') +
+                          (dailyId === h.id ? ' item-daily' : '')
+                        }
                         data-hid={h.id}
                         onKeyDown={onItemKeyDown}
                         onClick={(e) => {
@@ -527,6 +593,26 @@ export default function App() {
                           上{h.upperTrigram}（{h.upperNature}）· 下{h.lowerTrigram}（{h.lowerNature}）
                         </span>
                         <span className="item-judgment">{h.judgment}</span>
+                      </button>
+                      {/* 今日首卦名牌：挂在令牌上沿，不占卡片内部布局 */}
+                      {dailyId === h.id && (
+                        <span className="item-daily-tag">今日首卦</span>
+                      )}
+                      {/* 收藏钉：卡片的兄弟节点（不嵌在按钮里，点击不会触发进详情） */}
+                      <button
+                        type="button"
+                        className={
+                          'item-fav' +
+                          (favSet.has(h.id) ? ' is-on' : '') +
+                          (favBusyId === h.id ? ' is-busy' : '')
+                        }
+                        disabled={favBusyId === h.id}
+                        aria-pressed={favSet.has(h.id)}
+                        aria-label={(favSet.has(h.id) ? '取消收藏' : '收藏') + h.name}
+                        title={favSet.has(h.id) ? '取消收藏' : '收藏这一卦'}
+                        onClick={() => toggleCardFav(h.id)}
+                      >
+                        {favSet.has(h.id) ? '★' : '☆'}
                       </button>
                     </li>
                   ))}
