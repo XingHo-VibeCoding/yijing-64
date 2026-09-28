@@ -77,8 +77,8 @@ export default function App() {
   const favorites = store.loadFavorites()
   const quizSum = store.quizSummary()
   const current = currentId === null ? null : data.items.find((h) => h.id === currentId)
-  /* 今日第一卦的卦序号：从当日存档记录推导（没有就是 null，卡片不镶银边） */
-  const dailyId = (records.find((r) => r.date === store.todayKey()) || {}).hexagramId ?? null
+  /* 每日第一卦的卦序号集合：每条存档记录都是「某天的第一卦」，历史记录同样镶边、永不撤销 */
+  const dailyIds = new Set(records.map((r) => r.hexagramId))
   const favSet = new Set(favorites.map((f) => f.hexagramId))
 
   /* ---------- 主视图的数据走 mock 接口（Day 8：本周不接真实 API） ----------
@@ -577,7 +577,7 @@ export default function App() {
                         className={
                           'item' +
                           (highlightId === h.id ? ' is-hit' : '') +
-                          (dailyId === h.id ? ' item-daily' : '')
+                          (dailyIds.has(h.id) ? ' item-daily' : '')
                         }
                         data-hid={h.id}
                         onKeyDown={onItemKeyDown}
@@ -594,10 +594,6 @@ export default function App() {
                         </span>
                         <span className="item-judgment">{h.judgment}</span>
                       </button>
-                      {/* 今日首卦名牌：挂在令牌上沿，不占卡片内部布局 */}
-                      {dailyId === h.id && (
-                        <span className="item-daily-tag">今日首卦</span>
-                      )}
                       {/* 收藏钉：卡片的兄弟节点（不嵌在按钮里，点击不会触发进详情） */}
                       <button
                         type="button"
