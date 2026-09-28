@@ -902,10 +902,20 @@ body {
    用 ::after + mask 挖出 7px 圆角环：不动卡片自身的背景栈，图案只出现在环带里 */
 .list li .item.item-daily {
   border-color: rgba(110, 80, 35, .6);
+  /* 木面板往银框里凹：内贝vel 四边加深（上最暗、底棱受光），中段鼓起的凸面受光 */
+  background-image:
+    linear-gradient(180deg,
+      rgba(0, 0, 0, .24), rgba(0, 0, 0, 0) 22%,
+      rgba(255, 236, 192, .10) 42%, rgba(255, 236, 192, .05) 58%,
+      rgba(0, 0, 0, 0) 78%, rgba(0, 0, 0, .28)),
+    linear-gradient(180deg, rgba(255, 225, 175, .13), rgba(0, 0, 0, 0) 42%),
+    var(--wood-grain);
   box-shadow:
-    inset 0 1px 0 rgba(255, 225, 175, .16),
-    inset 0 0 22px rgba(0, 0, 0, .42),
-    inset 0 -3px 8px rgba(0, 0, 0, .30),
+    inset 0 2px 4px rgba(0, 0, 0, .52),
+    inset 0 -2px 3px rgba(255, 228, 180, .13),
+    inset 3px 0 6px rgba(0, 0, 0, .26),
+    inset -3px 0 6px rgba(0, 0, 0, .26),
+    inset 0 0 26px rgba(0, 0, 0, .46),
     0 0 0 1px rgba(150, 156, 163, .4),
     0 0 18px rgba(228, 232, 238, .2),
     0 3px 8px rgba(10, 5, 1, .5);
