@@ -221,11 +221,11 @@ export default function Quiz({ onOpenDetail, onBack }) {
             <div className="q-slot" key={i}>
               <span className="q-slot-label">{YAO_LABEL[i]}</span>
               <span className={'q-slot-line' + (v === undefined ? ' is-empty' : v === 1 ? ' is-yang' : ' is-yin')}>
-                {v === 1 && <span className="q-bar" />}
+                {v === 1 && <span className="yao-bar" />}
                 {v === 0 && (
                   <>
-                    <span className="q-bar" />
-                    <span className="q-bar" />
+                    <span className="yao-bar" />
+                    <span className="yao-bar" />
                   </>
                 )}
               </span>
@@ -236,10 +236,17 @@ export default function Quiz({ onOpenDetail, onBack }) {
 
       <div className="q-keys">
         <button type="button" className="cr-btn q-key-yang" disabled={judged} onClick={() => place(1)}>
-          ━━━ 阳爻
+          <span className="q-key-glyph" aria-hidden="true">
+            <span className="yao-bar" />
+          </span>
+          阳爻
         </button>
         <button type="button" className="cr-btn q-key-yin" disabled={judged} onClick={() => place(0)}>
-          ━ ⚏ ━ 阴爻
+          <span className="q-key-glyph" aria-hidden="true">
+            <span className="yao-bar" />
+            <span className="yao-bar" />
+          </span>
+          阴爻
         </button>
         <button type="button" className="cr-btn q-key-undo" disabled={judged || built.length === 0} onClick={undo}>
           撤销
