@@ -173,6 +173,21 @@ export function clearAll() {
   }
 }
 
+/** 镀金：测验答对 6 题以上的奖励 —— 被镀金的卦在总表上金字显示，永久保留 */
+const K_GILDED = 'yijing.gilded.v1'
+
+export function loadGilded() {
+  return read(K_GILDED, [])
+}
+
+/** @returns {boolean} true = 这次真的镀上了；false = 早就镀过（幂等） */
+export function addGilded(hexagramId) {
+  const list = loadGilded()
+  if (list.includes(hexagramId)) return false
+  list.push(hexagramId)
+  return write(K_GILDED, list)
+}
+
 /** 首页入口上的计数 */
 export function counts() {
   return { records: loadRecords().length, favorites: loadFavorites().length }

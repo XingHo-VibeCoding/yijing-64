@@ -80,6 +80,8 @@ export default function App() {
   /* 每日第一卦的卦序号集合：每条存档记录都是「某天的第一卦」，历史记录同样镶边、永不撤销 */
   const dailyIds = new Set(records.map((r) => r.hexagramId))
   const favSet = new Set(favorites.map((f) => f.hexagramId))
+  /* 镀金的卦：测验奖励，卦名与卦辞金字显示（永久） */
+  const gildedSet = new Set(store.loadGilded())
 
   /* ---------- 主视图的数据走 mock 接口（Day 8：本周不接真实 API） ----------
      数据本身就在本地 JSON 里，「成功」态内容与原来完全一致；
@@ -508,7 +510,7 @@ export default function App() {
               {quizSum.rounds} 轮 · 正确率 {Math.round(quizSum.accuracy * 100)}% · 最好一次 {quizSum.best} 题
             </span>
           ) : (
-            <span className="my-records-n">看卦象选卦名 · 一轮 20 题</span>
+            <span className="my-records-n">照卦名拼卦象 · 一轮 8 题 · 答对 6 题镀金一卦</span>
           )}
         </button>
 
@@ -577,7 +579,8 @@ export default function App() {
                         className={
                           'item' +
                           (highlightId === h.id ? ' is-hit' : '') +
-                          (dailyIds.has(h.id) ? ' item-daily' : '')
+                          (dailyIds.has(h.id) ? ' item-daily' : '') +
+                          (gildedSet.has(h.id) ? ' item-gilded' : '')
                         }
                         data-hid={h.id}
                         onKeyDown={onItemKeyDown}

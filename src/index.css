@@ -964,3 +964,91 @@ body {
   border: 1px solid rgba(140, 47, 33, .4);
   border-radius: 6px;
 }
+
+/* ============================================================
+   Day 11 · 测验改版：照卦名拼卦象 + 镀金奖励
+   ============================================================ */
+
+/* 题面：只出示卦名 */
+.q-face-name {
+  margin: 6px 0 0;
+  font-size: 42px; font-weight: 600; letter-spacing: .08em;
+  color: #4a3115;   /* 题面是浅色宣纸，卦名必须深墨（米色字压纸面不可读，R3 教训） */
+}
+
+/* 拼卦区：上爻在上、初爻在下 */
+.q-build {
+  display: flex; flex-direction: column; gap: 7px;
+  width: min(340px, 86%);
+  margin: 16px auto 0; padding: 12px 14px;
+  background: rgba(0, 0, 0, .22);
+  border: 1px solid rgba(201, 174, 130, .3);
+  border-radius: 8px;
+}
+.q-slot { display: flex; align-items: center; gap: 12px; }
+.q-slot-label {
+  width: 1.6em; text-align: right;
+  font-size: 12px; color: #c9ae82; font-variant-numeric: tabular-nums;
+}
+.q-slot-line { flex: 1; display: flex; justify-content: center; min-height: 12px; }
+.q-slot-line.is-empty { border-bottom: 1px dashed rgba(201, 174, 130, .35); }
+.q-slot-line .q-bar {
+  height: 9px; flex: 1;
+  background: #ead8b4;
+  border-radius: 2px;
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, .3);
+}
+.q-slot-line.is-yin { gap: 14px; }
+
+/* 阴阳爻按键 */
+.q-keys { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+.q-key-yang, .q-key-yin { min-width: 128px; }
+.q-key-undo { color: #c9ae82; }
+.q-key-undo:disabled { opacity: .4; cursor: not-allowed; }
+
+/* 答题后的正确卦象 */
+.q-answer-figure { display: flex; justify-content: center; margin-top: 10px; }
+
+/* 奖励：随机出示一枚未镀金的卦，点击领取 */
+.q-reward {
+  margin: 14px auto 0; padding: 16px 18px;
+  width: min(420px, 92%);
+  text-align: center;
+  background: rgba(0, 0, 0, .22);
+  border: 1px solid rgba(242, 217, 140, .45);
+  border-radius: 10px;
+}
+.q-reward-title {
+  margin: 0 0 10px;
+  font-size: 15px; letter-spacing: .2em;
+  color: #f2d98c;
+}
+.q-reward-card {
+  display: block; width: 100%; padding: 14px 12px;
+  font: inherit;
+  background: rgba(64, 40, 10, .45);
+  border: 1px solid rgba(242, 217, 140, .55);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .12s, box-shadow .12s;
+}
+.q-reward-card:hover:not(:disabled) {
+  border-color: rgba(242, 217, 140, .95);
+  box-shadow: 0 0 14px rgba(242, 217, 140, .22);
+}
+.q-reward-card:disabled { cursor: default; }
+.q-reward-symbol { display: block; font-size: 34px; line-height: 1.2; color: #f5ead0; }
+.q-reward-name { display: block; margin-top: 4px; font-size: 20px; font-weight: 600; color: #f5ead0; }
+.q-reward-meta { display: block; margin-top: 6px; font-size: 12.5px; color: #c9ae82; }
+.q-reward-go { display: block; margin-top: 10px; font-size: 13px; color: #f2d98c; }
+.q-reward-note { margin: 10px 0 0; font-size: 12px; color: var(--ink-soft); }
+
+/* 镀金：总表木牌上的卦名与卦辞变金字（永久） */
+.item-gilded .item-name,
+.item-gilded .item-judgment {
+  background: linear-gradient(180deg, #ffeaa9 8%, #f0c25a 48%, #c8912a 88%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 3px rgba(255, 215, 130, .3));
+}
