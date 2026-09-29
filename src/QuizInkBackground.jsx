@@ -53,6 +53,27 @@ export default function QuizInkBackground() {
         })
       }
     }
+    // 翻涌的墨（边缘）：贴边分布、避开中央题面区，缓慢滚动 + 浓淡脉动（营造神秘感）
+    const CHURN = 15
+    const churns = []
+    const EDGES = [ // 沿四边的锚点（u,v），中央 0.3–0.7 区不放
+      { u: 0.1, v: 0.12 }, { u: 0.3, v: 0.04 }, { u: 0.7, v: 0.06 }, { u: 0.92, v: 0.1 },
+      { u: 0.03, v: 0.45 }, { u: 0.97, v: 0.42 }, { u: 0.04, v: 0.78 }, { u: 0.95, v: 0.76 },
+      { u: 0.18, v: 0.97 }, { u: 0.55, v: 0.95 }, { u: 0.84, v: 0.96 }, { u: 0.5, v: 0.02 },
+      { u: 0.02, v: 0.28 }, { u: 0.99, v: 0.62 }, { u: 0.66, v: 0.03 },
+    ]
+    for (let i = 0; i < CHURN; i++) {
+      const e = EDGES[i % EDGES.length]
+      churns.push({
+        u: e.u + (Math.random() - 0.5) * 0.05,
+        v: e.v + (Math.random() - 0.5) * 0.05,
+        r: (90 + Math.random() * 150) * 0.95,
+        a: 0.22 + Math.random() * 0.3,
+        ph: Math.random() * Math.PI * 2,
+        sp: 0.16 + Math.random() * 0.2, // 翻涌速度
+      })
+    }
+
     // 白色云气团（中右侧为主）
     const CLOUDS = 18
     const clouds = []
@@ -114,6 +135,27 @@ export default function QuizInkBackground() {
         ctx.beginPath()
         ctx.arc(cx, cy, r, 0, Math.PI * 2)
         ctx.fill()
+      }
+
+      // ②′ 翻涌的墨（边缘）：贴边缓慢滚动 + 浓淡脉动（滚动 = 位置摆动，翻涌 = 半径/透明度呼吸）
+      for (const c of churns) {
+        const cx = (c.u + Math.sin(T * c.sp + c.ph) * 0.018) * W
+        const cy = (c.v + Math.cos(T * c.sp * 0.8 + c.ph) * 0.016) * H
+        const pulse = 1 + 0.22 * Math.sin(T * c.sp * 1.7 + c.ph)
+        const r = c.r * pulse
+        const a = c.a * (0.72 + 0.28 * Math.sin(T * c.sp * 2.1 + c.ph * 1.3))
+        for (let k = 0; k < 3; k++) {
+          const g = ctx.createRadialGradient(
+            cx + (k - 1) * r * 0.22, cy + Math.sin(T * c.sp + k * 2) * r * 0.1, 0,
+            cx + (k - 1) * r * 0.22, cy + Math.sin(T * c.sp + k * 2) * r * 0.1, r * (1 - k * 0.12))
+          g.addColorStop(0, `rgba(20, 18, 16, ${a * (1 - k * 0.3)})`)
+          g.addColorStop(0.6, `rgba(22, 20, 18, ${a * (1 - k * 0.3) * 0.55})`)
+          g.addColorStop(1, 'rgba(22, 20, 18, 0)')
+          ctx.fillStyle = g
+          ctx.beginPath()
+          ctx.arc(cx + (k - 1) * r * 0.22, cy + Math.sin(T * c.sp + k * 2) * r * 0.1, r * (1 - k * 0.12), 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
 
       // ③ 浓墨笔触：沿漩涡排布，随时间沿弧摆动（「流动」的主体）

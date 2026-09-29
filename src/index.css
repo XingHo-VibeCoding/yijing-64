@@ -1116,51 +1116,79 @@ body {
 .yao-side:disabled { cursor: default; opacity: .45; }
 .yao-side:hover:not(:disabled) { filter: brightness(1.06); }
 
-/* 白色一半：一条完整的水墨（阳爻图形）—— 多层水纹漂移（水流感，非匀速滑条） */
-.yao-ink { position: relative; display: block; width: 100%; height: 22px; border-radius: 4px; overflow: hidden; }
+/* 阴阳爻键的水流：照水花样本 —— 半透明波带起伏 + 内部流线 + 飞沫水珠
+   三层各司其职：::before 波体（随浪起伏横移）、::after 飞沫（上浮循环）、容器本体轻幅起伏 */
+.yao-ink { position: relative; display: block; width: 100%; height: 24px; border-radius: 4px; overflow: hidden;
+  animation: yao-undulate 4.2s ease-in-out infinite alternate; }
+@keyframes yao-undulate { from { transform: translateY(-1.6px); } to { transform: translateY(1.6px); } }
+
 .yao-ink-yang {
-  background: linear-gradient(180deg, #ffffff, #efece5 60%, #e5e1d8);
+  background:
+    radial-gradient(ellipse 70% 120% at 50% 50%, rgba(255, 255, 255, .92), rgba(255, 255, 255, .55) 70%, rgba(255, 255, 255, .25)),
+    linear-gradient(180deg, #ffffff, #e9e5dc);
   box-shadow:
     0 0 16px rgba(255, 255, 255, .95),
-    inset 0 0 9px rgba(110, 105, 95, .2),
-    inset 0 1px 0 rgba(255, 255, 255, .9);
+    inset 0 2px 4px rgba(110, 105, 95, .18),
+    inset 0 -2px 5px rgba(255, 255, 255, .85);
 }
 .yao-ink-yang::before {
-  content: ''; position: absolute; inset: -40% -60%;
+  content: ''; position: absolute; inset: -50% -70%;
   background-image:
-    radial-gradient(ellipse 58px 24px at 30px 52%, rgba(122, 116, 104, .3), rgba(122, 116, 104, 0) 70%),
-    radial-gradient(ellipse 84px 30px at 108px 42%, rgba(150, 144, 130, .26), rgba(150, 144, 130, 0) 70%),
-    radial-gradient(ellipse 66px 20px at 184px 58%, rgba(128, 122, 110, .28), rgba(128, 122, 110, 0) 70%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 4%, rgba(255, 255, 255, .95) 30%,
+      rgba(184, 179, 168, .55) 52%, rgba(255, 255, 255, .9) 72%, rgba(255, 255, 255, 0) 96%);
   background-size: 230px 100%;
-  animation: ink-stream-230 8s linear infinite;
-  filter: blur(5px);
+  animation: ink-stream-230 7s linear infinite, yao-churn 3.4s ease-in-out infinite alternate;
+  filter: blur(4px);
 }
 .yao-ink-yang::after {
-  content: ''; position: absolute; inset: -40% -60%;
-  background-image: radial-gradient(ellipse 130px 11px at 60px 30%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 72%);
-  background-size: 250px 100%;
-  animation: ink-stream-250 5s linear infinite reverse;
-  filter: blur(1.5px);
+  content: ''; position: absolute; inset: -160% -70%;
+  background-image:
+    radial-gradient(circle 3.2px at 36px 30%, rgba(90, 86, 78, .5), rgba(90, 86, 78, 0) 72%),
+    radial-gradient(circle 2.2px at 92px 18%, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0) 72%),
+    radial-gradient(circle 2.8px at 148px 34%, rgba(105, 100, 92, .42), rgba(105, 100, 92, 0) 72%),
+    radial-gradient(circle 1.8px at 200px 24%, rgba(255, 255, 255, .9), rgba(255, 255, 255, 0) 72%),
+    radial-gradient(circle 2.4px at 246px 40%, rgba(96, 92, 84, .4), rgba(96, 92, 84, 0) 72%);
+  background-size: 280px 100%;
+  animation: ink-stream-280 5.5s linear infinite, yao-droplets 2.6s ease-in-out infinite alternate;
+  filter: blur(.6px);
 }
-/* 黑色一半：中间截断的两段（阴爻图形）—— 墨面下有反向流动的水光 */
 .yao-ink-yin { display: flex; gap: 18px; background: none; box-shadow: none; }
 .yao-ink-yin i {
   flex: 1; position: relative; overflow: hidden; border-radius: 3px;
-  background: linear-gradient(180deg, #1a1815, #0e0d0b);
-  box-shadow: 0 0 12px rgba(10, 9, 8, .38), inset 0 1px 0 rgba(255, 255, 255, .14);
+  background:
+    radial-gradient(ellipse 70% 130% at 50% 50%, rgba(38, 35, 30, .9), rgba(14, 13, 11, .9) 75%),
+    linear-gradient(180deg, #1a1815, #0e0d0b);
+  box-shadow: 0 0 12px rgba(10, 9, 8, .38), inset 0 2px 4px rgba(255, 255, 255, .1);
 }
 .yao-ink-yin i::before {
-  content: ''; position: absolute; inset: -40% -60%;
+  content: ''; position: absolute; inset: -50% -70%;
   background-image:
-    radial-gradient(ellipse 64px 26px at 40px 44%, rgba(255, 255, 255, .13), rgba(255, 255, 255, 0) 70%),
-    radial-gradient(ellipse 48px 18px at 128px 58%, rgba(206, 200, 188, .11), rgba(206, 200, 188, 0) 70%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 6%, rgba(210, 205, 195, .34) 30%,
+      rgba(255, 255, 255, .12) 52%, rgba(206, 200, 188, .3) 74%, rgba(255, 255, 255, 0) 94%);
   background-size: 190px 100%;
-  animation: ink-stream-190 6.5s linear infinite reverse;
+  animation: ink-stream-190 8s linear infinite reverse, yao-churn 3.8s ease-in-out infinite alternate-reverse;
   filter: blur(4px);
 }
+.yao-ink-yin i::after {
+  content: ''; position: absolute; inset: -160% -70%;
+  background-image:
+    radial-gradient(circle 2.6px at 50px 26%, rgba(228, 224, 214, .55), rgba(228, 224, 214, 0) 72%),
+    radial-gradient(circle 1.8px at 118px 16%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 72%),
+    radial-gradient(circle 2.2px at 176px 32%, rgba(216, 211, 200, .45), rgba(216, 211, 200, 0) 72%);
+  background-size: 240px 100%;
+  animation: ink-stream-240 6s linear infinite reverse, yao-droplets 3s ease-in-out infinite alternate;
+  filter: blur(.5px);
+}
+/* 横移（周期与位移严格相等 = 无缝循环） */
 @keyframes ink-stream-230 { from { transform: translateX(0); } to { transform: translateX(-230px); } }
-@keyframes ink-stream-250 { from { transform: translateX(0); } to { transform: translateX(-250px); } }
 @keyframes ink-stream-190 { from { transform: translateX(0); } to { transform: translateX(-190px); } }
+@keyframes ink-stream-240 { from { transform: translateX(0); } to { transform: translateX(-240px); } }
+@keyframes ink-stream-280 { from { transform: translateX(0); } to { transform: translateX(-280px); } }
+/* 浪的起伏（容器轻幅上下）与 波内翻涌（波体轻微形变） */
+@keyframes yao-undulate { from { transform: translateY(-1.6px); } to { transform: translateY(1.6px); } }
+@keyframes yao-churn { from { transform: translateY(-2px) scaleY(1.06); } to { transform: translateY(2px) scaleY(.96); } }
+/* 飞沫上浮 */
+@keyframes yao-droplets { from { transform: translateY(2.5px); } to { transform: translateY(-2.5px); } }
 .yao-side-label {
   font-size: 12.5px; letter-spacing: .18em; color: #4b463d;
 }
