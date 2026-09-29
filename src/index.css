@@ -1046,14 +1046,31 @@ body {
 .q-reward-go { display: block; margin-top: 10px; font-size: 13px; color: #f2d98c; }
 .q-reward-note { margin: 10px 0 0; font-size: 12px; color: var(--ink-soft); }
 
-/* 镀金：总表木牌上的卦名与卦辞变金字（永久） */
+/* 镀金：总表木牌上的卦名与卦辞变金字（永久）—— Day 12 追加做明显：
+   卡片金环(outline，与每日银边的 box-shadow 互不冲突，二者可叠加) + 外发光 + 更亮的金字 */
+.list li .item.item-gilded {
+  outline: 2px solid rgba(248, 205, 105, .95);
+  outline-offset: -4px;
+  filter: drop-shadow(0 0 9px rgba(255, 206, 110, .45));
+}
 .item-gilded .item-name,
 .item-gilded .item-judgment {
-  background: linear-gradient(180deg, #ffeaa9 8%, #f0c25a 48%, #c8912a 88%);
+  background: linear-gradient(180deg, #fff5cf 6%, #ffdd80 42%, #eeb244 78%, #d99b28 95%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 3px rgba(255, 215, 130, .3));
+  filter: drop-shadow(0 0 5px rgba(255, 222, 140, .55));
+}
+.item-gilded .item-symbol {
+  text-shadow: 0 0 10px rgba(255, 214, 120, .75), 0 0 3px rgba(255, 236, 180, .9);
+}
+
+/* 测验「下一题」的黑墨翻涌转场层（portal 到 body，盖住一切） */
+.q-sweep {
+  position: fixed; inset: 0; z-index: 80;
+}
+.q-sweep canvas {
+  display: block; width: 100%; height: 100%;
 }
 
 /* ============================================================

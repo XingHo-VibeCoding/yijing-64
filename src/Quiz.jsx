@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import data from '../data/64卦.json'
 import HexagramFigure from './HexagramFigure.jsx'
 import QuizInkBackground from './QuizInkBackground.jsx'
+import QuizInkSweep from './QuizInkSweep.jsx'
 import SourceTag from './SourceTag.jsx'
 import * as store from './storage.js'
 import { makeRound, QUESTIONS_PER_ROUND } from './quiz.js'
@@ -28,6 +29,7 @@ export default function Quiz({ onOpenDetail, onBack }) {
   const [correct, setCorrect] = useState(0)
   const [wrongIds, setWrongIds] = useState([])
   const [result, setResult] = useState(null) // { score, total, rewardId, claimed }
+  const [sweep, setSweep] = useState(false) // 下一题的黑墨翻涌转场进行中
   const [claimed, setClaimed] = useState(false)
 
   const q = round[index]
@@ -65,9 +67,8 @@ export default function Quiz({ onOpenDetail, onBack }) {
 
   const advance = () => {
     if (!isLast) {
-      setIndex((i) => i + 1)
-      setBuilt([])
-      setJudged(false)
+      if (sweep) return // 转场进行中忽略重复点击
+      setSweep(true) // 黑墨翻涌遮屏 → 遮满一瞬换题 → 散开露新题
       return
     }
     // 最后一题答完 → 记成绩，并抽出奖励卦（从未镀金的卦里随机，不重复）
@@ -77,6 +78,14 @@ export default function Quiz({ onOpenDetail, onBack }) {
     const rewardId = pool.length && correct >= 6 ? pool[Math.floor(Math.random() * pool.length)] : null
     setResult({ score: correct, total: round.length, rewardId, claimed: false })
   }
+
+  /* 墨遮满全屏的一瞬换题：新题的名字会按 nameShown 时序在墨散中浮出 */
+  const handleSweepCovered = () => {
+    setIndex((i) => i + 1)
+    setBuilt([])
+    setJudged(false)
+  }
+  const handleSweepDone = () => setSweep(false)
 
   const claimReward = () => {
     if (!result || !result.rewardId || result.claimed) return
@@ -303,6 +312,8 @@ export default function Quiz({ onOpenDetail, onBack }) {
       <p className="q-foot">
         一轮 {QUESTIONS_PER_ROUND} 题 · 同一轮不重复 · 答对 6 题以上随机出示一枚未镀金的卦，点击即镀金
       </p>
+
+      {sweep && <QuizInkSweep onCovered={handleSweepCovered} onDone={handleSweepDone} />}
     </main>
   )
 }

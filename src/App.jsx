@@ -540,10 +540,10 @@ export default function App() {
           测一测
           {quizSum.answered > 0 ? (
             <span className="my-records-n">
-              {quizSum.rounds} 轮 · 正确率 {Math.round(quizSum.accuracy * 100)}% · 最好一次 {quizSum.best} 题
+              {quizSum.rounds} 轮 · 正确率 {Math.round(quizSum.accuracy * 100)}% · 已镀金 {gildedSet.size} / 64 卦
             </span>
           ) : (
-            <span className="my-records-n">照卦名拼卦象 · 一轮 8 题 · 答对 6 题镀金一卦</span>
+            <span className="my-records-n">已镀金 {gildedSet.size} / 64 卦 · 一轮 8 题 · 答对 6 题再镀一卦</span>
           )}
         </button>
 
