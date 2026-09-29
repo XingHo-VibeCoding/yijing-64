@@ -1231,3 +1231,44 @@ body {
   border: 1px solid rgba(30, 28, 25, .35);
 }
 .quiz-ink .detail-bar .back:hover { background: rgba(255, 255, 255, .78); border-color: rgba(30, 28, 25, .6); }
+
+/* ============================================================
+   Day 12 · 总表筛选（F4）：宣纸上的一条筛选栏
+   规则遵循 frontend-rules Skill：深墨字（§2）、布局零侵入（§3）、
+   min() 弹性宽度（§4）、focus 可见（§7）
+   ============================================================ */
+
+.list-filter {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin: 30px 0 2px;
+}
+.list-filter-input {
+  flex: 1 1 260px; max-width: min(430px, 100%);
+  padding: 9px 14px;
+  font: inherit; font-size: 14px;
+  color: #171512;                                  /* 浅宣纸上必须深墨（Skill §2） */
+  background: rgba(255, 255, 255, .62);
+  border: 1px solid rgba(60, 52, 40, .45);
+  border-radius: 8px;
+}
+.list-filter-input::placeholder { color: #6b6455; opacity: 1; }
+.list-filter-input:focus-visible {
+  outline: 2px solid rgba(111, 83, 48, .65);       /* focus 可见（Skill §7） */
+  outline-offset: 1px;
+}
+.list-filter-clear {
+  padding: 8px 14px;
+  font: inherit; font-size: 13px;
+  color: #26231f;
+  background: rgba(255, 255, 255, .55);
+  border: 1px solid rgba(60, 52, 40, .45);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.list-filter-clear:hover { background: rgba(255, 255, 255, .8); }
+.list-filter-clear:focus-visible { outline: 2px solid rgba(111, 83, 48, .65); outline-offset: 1px; }
+.list-filter-count {
+  margin: 0;
+  font-size: 12.5px;
+  color: #6f5330;                                  /* 对纸面实测 4.92 ≥ 4.5（Skill §2 已验证色对） */
+}

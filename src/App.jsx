@@ -49,6 +49,9 @@ function go(hash) {
  */
 const P_HAS_CHANGING = 1 - Math.pow(0.75, 6)
 
+/* 拼音声调归一化：NFD 分解后去掉组合符（qián→qian、lǜ→lu） */
+const stripTones = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
 /**
  * 一键起卦：六爻各自随机（阳 / 阴各半），再按六爻查卦。
  *
@@ -94,7 +97,9 @@ export default function App() {
   const [favBusyId, setFavBusyId] = useState(null) // 正在写入收藏的卡片 id：写入期间该按钮禁用，防连点
   const [favError, setFavError] = useState('') // 收藏失败的可理解提示，4 秒后自动消失
   const favErrTimer = useRef(null)
-
+  const [filterText, setFilterText] = useState(
+    () => new URLSearchParams(window.location.search).get('q') || '' // F4 筛选；?q= 深链直达筛选态
+  )
   /* ---------- 以下每帧从本地存储重读（bump() 触发） ---------- */
   const [list, setList] = useState({ status: 'loading', items: [], error: '' })
   const loadList = useCallback(() => {
@@ -481,6 +486,18 @@ export default function App() {
     )
   }
 
+  /* ---------- F4 筛选（卦名 / 拼音 / 序号 / 上下卦） ---------- */
+  const kw = filterText.trim().toLowerCase()
+  const kwPlain = stripTones(kw)
+  const matchHex = (h) =>
+    kw === '' ||
+    h.name.toLowerCase().includes(kw) ||
+    stripTones(h.pinyin || '').toLowerCase().includes(kwPlain) ||
+    String(h.id) === kw ||
+    (h.upperTrigram || '').includes(kw) ||
+    (h.lowerTrigram || '').includes(kw)
+  const matched = kw === '' ? list.items : list.items.filter(matchHex)
+
   /* ---------- 卦象爻辞总表（四种页面状态：加载 / 空 / 错误 / 成功） ----------
      ⚠️ 兜底分支：前面所有分支都没命中才轮到它 —— 无条件赋值会把详情页覆盖回列表 */
   if (viewNode === null)
@@ -580,14 +597,47 @@ export default function App() {
       {/* 成功 */}
       {list.status === 'ready' && list.items.length > 0 && (
         <>
-          {VOLUMES.map(({ key, range }) => (
+          {/* F4 筛选栏：有结果给计数、无结果给出路、可一键清空恢复（role=status 朗读） */}
+          <div className="list-filter">
+            <input
+              type="search"
+              className="list-filter-input"
+              placeholder="筛选：卦名 / 拼音 / 序号 / 上下卦…"
+              aria-label="筛选六十四卦"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+            />
+            {kw !== '' && (
+              <button type="button" className="list-filter-clear" onClick={() => setFilterText('')}>
+                清空
+              </button>
+            )}
+            <p className="list-filter-count" role="status">
+              {kw !== '' ? `找到 ${matched.length} 卦` : `共 ${list.items.length} 卦 · 输入即可筛选`}
+            </p>
+          </div>
+
+          {kw !== '' && matched.length === 0 && (
+            <section className="state">
+              <p className="state-title">没有匹配「{filterText.trim()}」的卦</p>
+              <p className="state-sub">试试卦名（如 乾）、拼音（如 qian）、序号（如 15）或上下卦（如 坎）。</p>
+              <button type="button" className="cr-btn" onClick={() => setFilterText('')}>
+                清空筛选，看全部 {list.items.length} 卦
+              </button>
+            </section>
+          )}
+
+          {VOLUMES.map(({ key, range }) => {
+            /* 筛选时该篇零命中的整篇隐藏 */
+            const groupItems = list.items.filter((h) => h.volume === key && matchHex(h))
+            if (kw !== '' && groupItems.length === 0) return null
+            return (
             <section key={key} className="volume">
               <h2 className="volume-title">
                 {key} <span className="volume-range">{range}</span>
               </h2>
               <ul className="list">
-                {list.items
-                  .filter((h) => h.volume === key)
+                {groupItems
                   .map((h) => (
                     <li key={h.id}>
                       <button
@@ -633,7 +683,8 @@ export default function App() {
                   ))}
               </ul>
             </section>
-          ))}
+            )
+          })}
 
           <footer className="foot">
             共 {list.items.length} 卦 · 每卦含六爻爻线与上下卦 · 数据来源：{data.meta.source}
