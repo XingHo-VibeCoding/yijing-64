@@ -1055,3 +1055,133 @@ body {
   color: transparent;
   filter: drop-shadow(0 0 3px rgba(255, 215, 130, .3));
 }
+
+/* ============================================================
+   Day 11 追加 · 测验「水墨国风」改版
+   白宣云气水墨打底（canvas 持续流动）+ 卦名墨散浮现 + 一分为二的流动水墨爻键
+   ============================================================ */
+
+/* 页面：让出底色给水墨画布 */
+.quiz-ink { background: none; }
+.quiz-ink-canvas {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none;
+}
+.quiz-ink > *:not(.quiz-ink-canvas) { position: relative; z-index: 1; }
+
+/* 题面：墨色楷书大字，由模糊中浮出（每题切换时重放）；
+   题面板去掉旧主题的暖色卡片，直接落在水墨底上（软白衬底仅托字） */
+.quiz-ink .q-face {
+  padding: 18px 24px;
+  background: radial-gradient(ellipse 62% 120% at 50% 50%, rgba(255, 255, 255, .78), rgba(255, 255, 255, 0) 72%);
+  border: none; border-radius: 0;
+}
+.quiz-ink .q-face-name {
+  font-size: 56px; font-weight: 600; letter-spacing: .14em;
+  color: #171512;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55), 0 0 18px rgba(250, 249, 247, .8);
+  opacity: 0; filter: blur(14px); transform: translateY(12px) scale(.985);
+  transition: opacity .95s cubic-bezier(.22, .72, .24, 1), filter .95s cubic-bezier(.22, .72, .24, 1),
+    transform .95s cubic-bezier(.22, .72, .24, 1);
+}
+.quiz-ink .q-face-name.is-shown { opacity: 1; filter: blur(0); transform: none; }
+.quiz-ink .q-face-hint { color: #57534b; }
+
+/* 拼卦区：半透明白宣 + 墨线 */
+.quiz-ink .q-build {
+  background: rgba(255, 255, 255, .52);
+  border: 1px solid rgba(30, 28, 25, .28);
+  box-shadow: 0 6px 22px rgba(40, 36, 30, .1);
+}
+.quiz-ink .q-slot-label { color: #4b463d; }
+.quiz-ink .q-slot-line.is-empty { border-bottom: 1.5px dashed rgba(30, 28, 25, .35); }
+.quiz-ink .q-slot-line .yao-bar {
+  background: #171512;
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, .3), 0 0 6px rgba(30, 28, 25, .25);
+}
+
+/* ---------- 阴阳爻输入：一条流动的水墨，从中间截断 ---------- */
+.yao-input {
+  display: flex; align-items: stretch;
+  width: min(440px, 88%);
+  margin: 22px auto 0;
+  gap: 0;
+}
+.yao-side {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 6px 4px 4px;
+  background: none; border: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.yao-side:disabled { cursor: default; opacity: .45; }
+.yao-side:hover:not(:disabled) { filter: brightness(1.06); }
+
+/* 白色一半：一条完整的水墨（阳爻图形）—— 墨色在流动 */
+.yao-ink { display: block; width: 100%; height: 22px; border-radius: 3px; }
+.yao-ink-yang {
+  background-image: linear-gradient(90deg,
+    rgba(255, 255, 255, 0) 0%, #ffffff 7%, #f4f1ea 22%, #ffffff 38%,
+    #ece8e0 55%, #ffffff 72%, #f6f4ee 88%, rgba(255, 255, 255, 0) 100%);
+  background-size: 220% 100%;
+  animation: yao-flow 7s linear infinite;
+  box-shadow:
+    0 0 16px rgba(255, 255, 255, .95),
+    inset 0 0 9px rgba(110, 105, 95, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+/* 黑色一半：中间截断的两段（阴爻图形）—— 同样在流动 */
+.yao-ink-yin { display: flex; gap: 18px; }
+.yao-ink-yin i {
+  flex: 1; border-radius: 3px;
+  background-image: linear-gradient(90deg,
+    #0e0d0b 0%, #2b2723 26%, #141210 48%, #35302a 72%, #17150f 100%);
+  background-size: 200% 100%;
+  animation: yao-flow 6s linear infinite reverse;
+  box-shadow: 0 0 12px rgba(10, 9, 8, .38), inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+@keyframes yao-flow {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+.yao-side-label {
+  font-size: 12.5px; letter-spacing: .18em; color: #4b463d;
+}
+
+/* 撤销：一行小字（墨色） */
+.yao-undo-row { display: flex; justify-content: center; margin-top: 6px; }
+.q-key-undo {
+  padding: 4px 10px;
+  font: inherit; font-size: 12.5px; letter-spacing: .1em;
+  color: #57534b; background: none;
+  border: none; border-bottom: 1px dashed rgba(30, 28, 25, .35);
+  cursor: pointer;
+}
+.q-key-undo:disabled { opacity: .35; cursor: default; }
+
+/* 进度条 / 反馈 / 结果区：半透明白宣，压在流动水墨上仍可读 */
+.quiz-ink .q-bar {
+  background: rgba(255, 255, 255, .62);
+  border: 1px solid rgba(30, 28, 25, .22);
+  color: #3d3931;
+}
+.quiz-ink .q-bar b { color: #171512; }
+.quiz-ink .q-foot { color: #6b665c; }
+.quiz-ink .q-feedback {
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid rgba(30, 28, 25, .25);
+}
+.quiz-ink .q-verdict { color: #171512; }
+.quiz-ink .q-answer, .quiz-ink .q-answer-meta { color: #3d3931; }
+.quiz-ink .q-none, .quiz-ink .q-sum, .quiz-ink .q-sum-soft { color: #3d3931; }
+.quiz-ink .q-wrong-item, .quiz-ink .q-reward {
+  background: rgba(255, 255, 255, .66);
+  border-color: rgba(30, 28, 25, .25);
+}
+
+/* 测验页顶部「退出测验」：木色按钮 → 墨色描边（贴合水墨底） */
+.quiz-ink .detail-bar .back {
+  color: #26231f;
+  background: rgba(255, 255, 255, .5);
+  border: 1px solid rgba(30, 28, 25, .35);
+}
+.quiz-ink .detail-bar .back:hover { background: rgba(255, 255, 255, .78); border-color: rgba(30, 28, 25, .6); }

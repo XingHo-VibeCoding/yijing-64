@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import data from '../data/64卦.json'
 import HexagramFigure from './HexagramFigure.jsx'
+import QuizInkBackground from './QuizInkBackground.jsx'
 import SourceTag from './SourceTag.jsx'
 import * as store from './storage.js'
 import { makeRound, QUESTIONS_PER_ROUND } from './quiz.js'
@@ -31,6 +32,14 @@ export default function Quiz({ onOpenDetail, onBack }) {
 
   const q = round[index]
   const target = byId(q.id)
+
+  /* 每题切换的「墨散名浮」：先 0.65s 水墨聚拢，再让卦名由模糊中浮出（水墨仍在四周流动） */
+  const [nameShown, setNameShown] = useState(false)
+  useEffect(() => {
+    setNameShown(false)
+    const t = window.setTimeout(() => setNameShown(true), 650)
+    return () => window.clearTimeout(t)
+  }, [index, round])
   const full = built.length === 6
   const isLast = index === round.length - 1
 
@@ -94,7 +103,8 @@ export default function Quiz({ onOpenDetail, onBack }) {
     const reward = result.rewardId ? byId(result.rewardId) : null
 
     return (
-      <main className="page quiz">
+      <main className="page quiz quiz-ink">
+      <QuizInkBackground />
         <div className="detail-bar">
           <button type="button" className="back" onClick={onBack}>
             ← 返回总表
@@ -192,7 +202,8 @@ export default function Quiz({ onOpenDetail, onBack }) {
 
   /* ---------- 答题：出示卦名，用户拼卦象 ---------- */
   return (
-    <main className="page quiz">
+    <main className="page quiz quiz-ink">
+      <QuizInkBackground />
       <div className="detail-bar">
         <button type="button" className="back" onClick={onBack}>
           ← 退出测验
@@ -209,7 +220,7 @@ export default function Quiz({ onOpenDetail, onBack }) {
       </div>
 
       <section className="q-face">
-        <p className="q-face-name">{target.name}</p>
+        <p className={"q-face-name" + (nameShown ? " is-shown" : "")}>{target.name}</p>
         <p className="q-face-hint">用下面的阴阳爻，从初爻到上爻拼出这一卦</p>
       </section>
 
@@ -234,22 +245,35 @@ export default function Quiz({ onOpenDetail, onBack }) {
         })}
       </div>
 
-      <div className="q-keys">
-        <button type="button" className="cr-btn q-key-yang" disabled={judged} onClick={() => place(1)}>
-          <span className="q-key-glyph" aria-hidden="true">
-            <span className="yao-bar" />
-          </span>
-          阳爻
+      {/* 阴阳爻：一条流动的水墨从中间截断 —— 左半白色为一条（阳爻），右半黑色中间有截断（阴爻） */}
+      <div className="yao-input" role="group" aria-label="阴阳爻输入">
+        <button
+          type="button"
+          className="q-key-yang yao-side"
+          disabled={judged}
+          onClick={() => place(1)}
+          aria-label="阳爻（左：白色一条）"
+        >
+          <span className="yao-ink yao-ink-yang" aria-hidden="true" />
+          <span className="yao-side-label">阳爻</span>
         </button>
-        <button type="button" className="cr-btn q-key-yin" disabled={judged} onClick={() => place(0)}>
-          <span className="q-key-glyph" aria-hidden="true">
-            <span className="yao-bar" />
-            <span className="yao-bar" />
+        <button
+          type="button"
+          className="q-key-yin yao-side"
+          disabled={judged}
+          onClick={() => place(0)}
+          aria-label="阴爻（右：黑色中断）"
+        >
+          <span className="yao-ink yao-ink-yin" aria-hidden="true">
+            <i />
+            <i />
           </span>
-          阴爻
+          <span className="yao-side-label">阴爻</span>
         </button>
-        <button type="button" className="cr-btn q-key-undo" disabled={judged || built.length === 0} onClick={undo}>
-          撤销
+      </div>
+      <div className="yao-undo-row">
+        <button type="button" className="q-key-undo" disabled={judged || built.length === 0} onClick={undo}>
+          撤销一笔
         </button>
       </div>
 
