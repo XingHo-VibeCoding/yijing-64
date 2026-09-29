@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 /**
  * 进入测验的「坠入仙境」转场（Day 11，用户指定分镜）：
  *   ① 0–2s   屏幕模糊 + 云雾自下而上升腾（白雾团，营造坠入仙境）
- *   ② 2–5s   淡黑墨自下翻涌遮住屏幕（3 秒涨满）
+ *   ② 2–5s   淡黑墨云自下涌过遮住屏幕（流式云团不断涌过，无水线）
  *   ③ 5s     墨盖满的一瞬通知外层换页（藏在墨底下）
  *   ④ 5–6.3s 墨散去，露出测验页
  *
@@ -80,6 +80,30 @@ export default function MistTransition({ onCovered, onDone }) {
     fit()
 
     const blobs = makeBlobs(W, H)
+
+    /* 墨云团（淡黑）：从屏下涌上、软边大团、不断叠加堆积 —— 云感而非水线 */
+    const makeClouds = (w, h) => {
+      const clouds = []
+      const COLS = 8
+      const ROWS = 6
+      for (let cx = 0; cx < COLS; cx++) {
+        for (let cy = 0; cy < ROWS; cy++) {
+          clouds.push({
+            x: ((cx + 0.5) / COLS + (Math.random() - 0.5) * 0.16) * w,
+            y: h + 60 + cy * 90 + Math.random() * 70, // 起点在屏外下方，行错峰
+            r: (95 + Math.random() * 140) * (w / 1440),
+            v: h * (0.00042 + Math.random() * 0.00026), // px/ms，升速错落
+            sway: 26 + Math.random() * 40,
+            ph: Math.random() * Math.PI * 2,
+            a: 0.10 + Math.random() * 0.09,
+            delay: T_INK_START + 60 + Math.random() * 1000, // 墨涌首秒内全部出发（3s 时已铺满中屏）
+          })
+        }
+      }
+      return clouds
+    }
+    const clouds = makeClouds(W, H)
+
     const root = document.documentElement
     root.classList.add('ink-transitioning') // 复用 .page 的模糊/压暗管道
 
@@ -128,37 +152,36 @@ export default function MistTransition({ onCovered, onDone }) {
         }
       }
 
-      /* ---------- ② 淡黑墨翻涌（3 秒涨满）→ ③ 散去 ---------- */
+      /* ---------- ② 淡黑墨「云涌」（确定性流式：墨云不断从屏下涌过）→ ③ 上飘散去 ---------- */
       ictx.clearRect(0, 0, W, H)
+      const outP = clamp01((el - T_COVER) / (T_OUT_END - T_COVER))
       if (el >= T_INK_START) {
-        const surgeP = clamp01((el - T_INK_START) / (T_COVER - T_INK_START)) // 0→1 涨满
-        const outP = clamp01((el - T_COVER) / (T_OUT_END - T_COVER)) // 散去进度
-        const alpha = 0.94 * easeInOutCubic(surgeP) * (1 - easeInOutCubic(outP))
-        if (alpha > 0.01) {
-          const rise = easeInOutCubic(surgeP) * (H * 1.18) // 涨幅略超屏高，保证盖满
-          const drift = easeInOutCubic(outP) * H * 0.35 // 散去时整体向上飘走
-          // 两层波面：后层更暗更缓，前层翻涌 —— 「翻涌」的层次感
-          const layers = [
-            { ph: 0, amp: H * 0.045, k: 1, a: 1, v: 1 },
-            { ph: 2.1, amp: H * 0.07, k: 1.7, a: 0.55, v: 1.25 },
-          ]
-          for (const L of layers) {
-            ictx.beginPath()
-            ictx.moveTo(0, H + 10)
-            const STEP = 26
-            for (let x = 0; x <= W + STEP; x += STEP) {
-              const u = x / W
-              const wave =
-                Math.sin(u * 9 * L.k + L.ph + el / 260) * L.amp * (0.5 + surgeP * 0.5) +
-                Math.sin(u * 17 * L.k - el / 190) * L.amp * 0.5
-              const y = H - rise * L.v + drift + wave * (0.4 + surgeP * 0.6)
-              ictx.lineTo(x, y)
-            }
-            ictx.lineTo(W, H + 10)
-            ictx.closePath()
-            ictx.fillStyle = `rgba(${INK}, ${alpha * L.a})`
-            ictx.fill()
-          }
+        const surgeP = clamp01((el - T_INK_START) / (T_COVER - T_INK_START))
+        const live = 1 - easeInOutCubic(outP) // 散去时墨云整体变淡
+        const LIFE = 2600 // 一朵云从屏下升到屏上的旅程
+        for (const c of clouds) {
+          if (el < c.delay) continue
+          const cycle = ((el - c.delay) * c.v) % (H + c.r * 2) // 确定性：同一 el 永远同一画面
+          const y = H + c.r - cycle
+          const x = c.x + Math.sin(el / 700 + c.ph) * c.sway
+          // 生命包络：出生淡入、临近屏顶淡出（云在远处消散）
+          const env = clamp01(cycle / (c.r * 1.5)) * clamp01((H + c.r - cycle) / (c.r * 1.5))
+          const a = c.a * env * live * (0.5 + surgeP * 0.5)
+          if (a <= 0.01) continue
+          const g = ictx.createRadialGradient(x, y, 0, x, y, c.r)
+          g.addColorStop(0, `rgba(${INK}, ${a})`)
+          g.addColorStop(0.6, `rgba(${INK}, ${a * 0.62})`)
+          g.addColorStop(1, `rgba(${INK}, 0)`)
+          ictx.fillStyle = g
+          ictx.beginPath()
+          ictx.arc(x, y, c.r, 0, Math.PI * 2)
+          ictx.fill()
+        }
+        // 兜底薄纱：墨涌后半段渐渐铺实，盖满前保证全屏遮蔽（换页藏在下面）
+        const veil = 0.92 * easeInOutCubic(clamp01((el - 3900) / (T_COVER - 3900))) * (1 - easeInOutCubic(outP))
+        if (veil > 0.01) {
+          ictx.fillStyle = `rgba(${INK}, ${veil})`
+          ictx.fillRect(0, 0, W, H)
         }
       }
 
