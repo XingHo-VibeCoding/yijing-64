@@ -1289,3 +1289,10 @@ body {
   font-size: 12.5px;
   color: #6f5330;                                  /* 对纸面实测 4.92 ≥ 4.5（Skill §2 已验证色对） */
 }
+
+/* Day 12 追加 · 测验页去 .page 投影：main 背景透明时，.page 的外投影 + inset 棕晕
+   会以矩形轮廓裸露在水墨亮底上（= 用户截图里的「不自然白边分割线」）。
+   总表页有纸面背景填充看不出，测验页必须去投影让水墨底 seamless。 */
+.quiz-ink.page {
+  box-shadow: none;
+}
