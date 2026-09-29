@@ -87,7 +87,7 @@ create table if not exists public.study_rounds (
   id         bigserial primary key,
   uid        text      not null,
   score      smallint  not null,
-  total      smallint  not null default 20,                 -- PRD F3：一轮 20 题
+  total      smallint  not null default 8,                  -- Day 11：一轮 8 题（原 20 已过期）
   created_at timestamptz not null default now()
 );
 
