@@ -107,6 +107,13 @@ export default function App() {
     loadList()
   }, [loadList])
 
+  /* 云端备份回流（storage.js 拉取合并后派发事件）→ 重读本地 */
+  useEffect(() => {
+    const onSynced = () => setTick((n) => n + 1)
+    window.addEventListener('yijing:cloud-synced', onSynced)
+    return () => window.removeEventListener('yijing:cloud-synced', onSynced)
+  }, [])
+
   /* 回到总表时，把刚起的卦滚到视野中间 */
   useEffect(() => {
     if (casting || currentId !== null || view !== 'list' || highlightId == null) return
