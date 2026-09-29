@@ -1064,7 +1064,7 @@ body {
 /* 页面：让出底色给水墨画布 */
 .quiz-ink { background: none; }
 .quiz-ink-canvas {
-  position: fixed; inset: 0; z-index: 0;
+  position: fixed; inset: 0; z-index: -1;   /* 负层级：垫在不透明页面之后、body 木纹之前 */
   pointer-events: none;
 }
 .quiz-ink > *:not(.quiz-ink-canvas) { position: relative; z-index: 1; }
@@ -1116,33 +1116,51 @@ body {
 .yao-side:disabled { cursor: default; opacity: .45; }
 .yao-side:hover:not(:disabled) { filter: brightness(1.06); }
 
-/* 白色一半：一条完整的水墨（阳爻图形）—— 墨色在流动 */
-.yao-ink { display: block; width: 100%; height: 22px; border-radius: 3px; }
+/* 白色一半：一条完整的水墨（阳爻图形）—— 多层水纹漂移（水流感，非匀速滑条） */
+.yao-ink { position: relative; display: block; width: 100%; height: 22px; border-radius: 4px; overflow: hidden; }
 .yao-ink-yang {
-  background-image: linear-gradient(90deg,
-    rgba(255, 255, 255, 0) 0%, #ffffff 7%, #f4f1ea 22%, #ffffff 38%,
-    #ece8e0 55%, #ffffff 72%, #f6f4ee 88%, rgba(255, 255, 255, 0) 100%);
-  background-size: 220% 100%;
-  animation: yao-flow 7s linear infinite;
+  background: linear-gradient(180deg, #ffffff, #efece5 60%, #e5e1d8);
   box-shadow:
     0 0 16px rgba(255, 255, 255, .95),
-    inset 0 0 9px rgba(110, 105, 95, .22),
+    inset 0 0 9px rgba(110, 105, 95, .2),
     inset 0 1px 0 rgba(255, 255, 255, .9);
 }
-/* 黑色一半：中间截断的两段（阴爻图形）—— 同样在流动 */
-.yao-ink-yin { display: flex; gap: 18px; }
+.yao-ink-yang::before {
+  content: ''; position: absolute; inset: -40% -60%;
+  background-image:
+    radial-gradient(ellipse 58px 24px at 30px 52%, rgba(122, 116, 104, .3), rgba(122, 116, 104, 0) 70%),
+    radial-gradient(ellipse 84px 30px at 108px 42%, rgba(150, 144, 130, .26), rgba(150, 144, 130, 0) 70%),
+    radial-gradient(ellipse 66px 20px at 184px 58%, rgba(128, 122, 110, .28), rgba(128, 122, 110, 0) 70%);
+  background-size: 230px 100%;
+  animation: ink-stream-230 8s linear infinite;
+  filter: blur(5px);
+}
+.yao-ink-yang::after {
+  content: ''; position: absolute; inset: -40% -60%;
+  background-image: radial-gradient(ellipse 130px 11px at 60px 30%, rgba(255, 255, 255, .95), rgba(255, 255, 255, 0) 72%);
+  background-size: 250px 100%;
+  animation: ink-stream-250 5s linear infinite reverse;
+  filter: blur(1.5px);
+}
+/* 黑色一半：中间截断的两段（阴爻图形）—— 墨面下有反向流动的水光 */
+.yao-ink-yin { display: flex; gap: 18px; background: none; box-shadow: none; }
 .yao-ink-yin i {
-  flex: 1; border-radius: 3px;
-  background-image: linear-gradient(90deg,
-    #0e0d0b 0%, #2b2723 26%, #141210 48%, #35302a 72%, #17150f 100%);
-  background-size: 200% 100%;
-  animation: yao-flow 6s linear infinite reverse;
-  box-shadow: 0 0 12px rgba(10, 9, 8, .38), inset 0 1px 0 rgba(255, 255, 255, .12);
+  flex: 1; position: relative; overflow: hidden; border-radius: 3px;
+  background: linear-gradient(180deg, #1a1815, #0e0d0b);
+  box-shadow: 0 0 12px rgba(10, 9, 8, .38), inset 0 1px 0 rgba(255, 255, 255, .14);
 }
-@keyframes yao-flow {
-  from { background-position: 0% 50%; }
-  to { background-position: 200% 50%; }
+.yao-ink-yin i::before {
+  content: ''; position: absolute; inset: -40% -60%;
+  background-image:
+    radial-gradient(ellipse 64px 26px at 40px 44%, rgba(255, 255, 255, .13), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(ellipse 48px 18px at 128px 58%, rgba(206, 200, 188, .11), rgba(206, 200, 188, 0) 70%);
+  background-size: 190px 100%;
+  animation: ink-stream-190 6.5s linear infinite reverse;
+  filter: blur(4px);
 }
+@keyframes ink-stream-230 { from { transform: translateX(0); } to { transform: translateX(-230px); } }
+@keyframes ink-stream-250 { from { transform: translateX(0); } to { transform: translateX(-250px); } }
+@keyframes ink-stream-190 { from { transform: translateX(0); } to { transform: translateX(-190px); } }
 .yao-side-label {
   font-size: 12.5px; letter-spacing: .18em; color: #4b463d;
 }

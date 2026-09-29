@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 /**
  * 测验页的水墨底（Day 11 追加，用户指定的美术方向）
@@ -190,5 +191,8 @@ export default function QuizInkBackground() {
     }
   }, [])
 
-  return <canvas ref={ref} className="quiz-ink-canvas" aria-hidden="true" />
+  // ⚠️ 必须 portal 到 body：转场期间 .page 带 filter（模糊），filter 会把 fixed 子元素的
+  // 定位基准从视口改成 .page 盒子 → 画布只盖住卡片盒，四周露出木底（「不完整页面」事故）。
+  // portal 出去 + z-index:-1：藏在不透明页面之后、body 木纹之前，测验页透明让出底色。
+  return createPortal(<canvas ref={ref} className="quiz-ink-canvas" aria-hidden="true" />, document.body)
 }
