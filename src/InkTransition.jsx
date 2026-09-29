@@ -21,8 +21,7 @@ const T_RIPPLE_END = 2000     // ① 涟漪（石头入水：冲击 → 波列�
 const T_DYE_START = 700       // ② 墨开始侵染
 const T_DYE_FULL = 3600       //    基本铺满（此时遮挡最完全）
 const T_FLOOD_START = 2200    //    整片淹没的起点：把墨点之间的缝合上
-const T_OUT_END = 4600        // ③ 墨散尽
-const T_SC_APPEAR = 3850      // ④ 卷好的竹简**随墨散浮现**（墨散 3600–4600，正好这一段淡入）
+const T_SC_APPEAR = 3850      // ④ 卷好的竹简**浮现于墨面之上**（墨不再提前散去）
 const T_SCROLL_START = 4500   //    墨将散尽才开始展开（2.2 秒 —— 慢）
 const T_SCROLL_END = 6700     //    展开到占满屏幕
 const T_EDGE_START = 4700     //    卷轴边缘的淡黑墨开始沿边往下淌
@@ -320,8 +319,11 @@ export default function InkTransition({ lines, origin, onDone, onCovered }) {
         ctx.globalAlpha = 1
       }
 
-      /* 墨的整体浓度：侵染期 1，散去期 → 0（连续函数，不用 latch） */
-      const inkAlpha = el < T_DYE_FULL ? 1 : 1 - easeInOutCubic(clamp01((el - T_DYE_FULL) / (T_OUT_END - T_DYE_FULL)))
+      /* 墨的整体浓度：侵染起 1，**一直撑到最后一拍**（竹简在墨上浮现展开，两侧绝不露页面），
+         6700 最后一层墨起时与墨起交叉淡出（墨起 + 残墨 ≈ 恒定遮蔽），退去时才随墨亮一起露出详情页 */
+      const inkAlpha = el < T_WASH_START
+        ? 1
+        : 1 - 0.95 * clamp01((el - T_WASH_START) / (T_WASH_PEAK - T_WASH_START))
       canvas.style.opacity = String(clamp01(inkAlpha))
 
       /* ---------- 墨盖满屏幕的一瞬 → 通知外层换页（藏在墨底下，用户看不见） ---------- */
@@ -335,7 +337,7 @@ export default function InkTransition({ lines, origin, onDone, onCovered }) {
       const scroll = scrollRef.current
       const open = clamp01((el - T_SCROLL_START) / (T_SCROLL_END - T_SCROLL_START))
       const openE = easeOutCubic(open)
-      // 出现时机：**墨散（3600–4600）时才淡入**。之前 opacity 每帧都被写成 1，
+      // 出现时机：3850 起淡入（**浮现在墨面之上**，墨撑住两侧不露页面）。之前 opacity 每帧都被写成 1，
       // 一条 4% 宽的细缝从第 0 帧就立在屏幕中央 —— 这正是「竹简出现太早」的原因
       const appearP = clamp01((el - T_SC_APPEAR) / 550)
       const scrollFade = clamp01((el - T_WASH_PEAK) / 320)
