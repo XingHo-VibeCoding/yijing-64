@@ -89,9 +89,13 @@ export default function QuizInkBackground() {
       })
     }
 
+    /* 视口缩放因子：所有随机几何量（云气/笔触/翻涌墨的尺寸）按 1080 设计基准缩放，
+       否则大视口下白斑变硬边大圆、笔触簇溢出主区（=「白边分割线」的真正来源） */
+    let S = 1
     const fit = () => {
       W = window.innerWidth
       H = window.innerHeight
+      S = Math.min(W, H) / 1080
       cv.width = Math.round(W * dpr)
       cv.height = Math.round(H * dpr)
       cv.style.width = W + 'px'
@@ -142,7 +146,7 @@ export default function QuizInkBackground() {
         const cx = (c.u + Math.sin(T * c.sp + c.ph) * 0.018) * W
         const cy = (c.v + Math.cos(T * c.sp * 0.8 + c.ph) * 0.016) * H
         const pulse = 1 + 0.22 * Math.sin(T * c.sp * 1.7 + c.ph)
-        const r = c.r * pulse
+        const r = c.r * S * pulse
         const a = c.a * (0.72 + 0.28 * Math.sin(T * c.sp * 2.1 + c.ph * 1.3))
         for (let k = 0; k < 3; k++) {
           const g = ctx.createRadialGradient(
@@ -171,7 +175,7 @@ export default function QuizInkBackground() {
         const ang = s.ang + breathe * 0.022 + T * 0.012
         const rad = s.rad
         const [x, y] = pt(ang, rad, 1)
-        if (x < -120 || x > W + 120 || y < -120 || y > H + 120) continue
+        if (x < W * 0.03 || x > W * 0.93 || y < -120 || y > H + 120) continue // 右缘留白给云气，左缘留边
         const [x2, y2] = pt(ang + s.len * SPAN, rad * 1.02, 1)
         // 锥形笔触：沿二次曲线分 7 段，宽度按两端尖的包络 —— 毛笔拖曳感（不是平行棍）
         const SEGS = 7
@@ -191,7 +195,7 @@ export default function QuizInkBackground() {
           ctx.moveTo(ax, ay)
           ctx.lineTo(bx, by)
           ctx.strokeStyle = `rgba(18, 16, 14, ${s.a * env * 1.5})`
-          ctx.lineWidth = Math.max(0.6, s.w * env)
+          ctx.lineWidth = Math.max(0.6, s.w * S * env)
           ctx.stroke()
         }
       }
@@ -200,10 +204,11 @@ export default function QuizInkBackground() {
       for (const c of clouds) {
         const x = c.u * W + Math.sin(T * 0.22 + c.ph) * c.sp
         const y = c.v * H + Math.cos(T * 0.17 + c.ph) * c.sp * 0.7
-        const gw = c.r * (1 + 0.08 * Math.sin(T * 0.3 + c.ph))
+        const gw = c.r * S * (1 + 0.08 * Math.sin(T * 0.3 + c.ph))
         const g = ctx.createRadialGradient(x, y, gw * 0.15, x, y, gw)
         g.addColorStop(0, `rgba(252, 251, 249, ${c.a})`)
-        g.addColorStop(0.6, `rgba(250, 249, 246, ${c.a * 0.6})`)
+        g.addColorStop(0.4, `rgba(250, 249, 246, ${c.a * 0.55})`)
+        g.addColorStop(0.75, `rgba(250, 249, 246, ${c.a * 0.18})`)
         g.addColorStop(1, 'rgba(250, 249, 246, 0)')
         ctx.fillStyle = g
         ctx.beginPath()
