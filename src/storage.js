@@ -17,6 +17,7 @@ import cloudbase from '@cloudbase/js-sdk'
 const K_RECORDS = 'yijing.records.v1'
 const K_FAVORITES = 'yijing.favorites.v1'
 const K_QUIZ = 'yijing.quiz.v1'
+const K_WRONG_CLOUD = 'yijing.wrongcloud.v1' // 云端累计进度的错题集合镜像（换设备时补回错题本）
 const K_GILDED = 'yijing.gilded.v1'
 
 /* localStorage 在隐私模式 / 存储禁用时会抛异常 —— 一律静默降级，绝不阻断起卦 */
@@ -158,6 +159,45 @@ async function pullAndMerge() {
     if (dirty) {
       merged.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
       write(K_FAVORITES, merged)
+      notifySynced()
+    }
+  }
+
+  /* 测验成绩流水：云上有、本地没有的轮次 → 补进本地（按 日期+得分+题数 去重）。
+     之前只上推不下拉，所以同一账号的进度读不回来（「每次进入重置」的成因之一）。 */
+  const { data: roundRows, error: roundErr } = await withTimeout(
+    c.db.from('study_rounds').select('score, total, created_at').eq('uid', c.uid)
+  )
+  if (!roundErr && Array.isArray(roundRows)) {
+    const local = read(K_QUIZ, [])
+    const seen = new Set(local.map((r) => `${r.date}|${r.score}|${r.total}`))
+    const merged = [...local]
+    let dirty = false
+    for (const row of roundRows) {
+      const date = (row.created_at || '').slice(0, 10) || todayKey()
+      const key = `${date}|${row.score}|${row.total}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      // 云端流水不含每轮答了哪些卦，故 answeredIds/wrongIds 留空（错题由 study_progress 补）
+      merged.push({ date, score: row.score || 0, total: row.total || 0, answeredIds: [], wrongIds: [] })
+      dirty = true
+    }
+    if (dirty) {
+      merged.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+      write(K_QUIZ, merged)
+      notifySynced()
+    }
+  }
+
+  /* 累计进度里的错题集合：单独存一份本地镜像，作为错题本的补充来源 */
+  const { data: progRows, error: progErr } = await withTimeout(
+    c.db.from('study_progress').select('wrong_ids').eq('uid', c.uid)
+  )
+  if (!progErr && Array.isArray(progRows) && progRows.length) {
+    const ids = normIds(progRows[0].wrong_ids)
+    const cur = JSON.stringify(normIds(read(K_WRONG_CLOUD, [])))
+    if (JSON.stringify(ids) !== cur) {
+      write(K_WRONG_CLOUD, ids)
       notifySynced()
     }
   }
@@ -353,10 +393,11 @@ export function quizWrongBook() {
   for (const r of [...loadQuizRounds()].reverse()) {
     for (const id of r.answeredIds || []) latest.set(id, (r.wrongIds || []).includes(id))
   }
-  return [...latest.entries()]
+  const ids = [...latest.entries()]
     .filter(([, wrong]) => wrong)
     .map(([id]) => id)
-    .sort((a, b) => a - b)
+  // 并入云端镜像（换设备后本地轮次里没有 answeredIds，靠它把错题本补回来）
+  return normIds([...ids, ...read(K_WRONG_CLOUD, [])])
 }
 
 /**
@@ -368,6 +409,7 @@ export function clearAll() {
     window.localStorage.removeItem(K_RECORDS)
     window.localStorage.removeItem(K_FAVORITES)
     window.localStorage.removeItem(K_QUIZ)
+    window.localStorage.removeItem(K_WRONG_CLOUD)
   } catch {
     /* 静默 */
   }
