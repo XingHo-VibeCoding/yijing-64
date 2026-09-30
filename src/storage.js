@@ -189,6 +189,19 @@ async function pullAndMerge() {
     }
   }
 
+  /* 镀金成就：云上有的并进本地（一人一行；换设备时把金字补回来） */
+  const { data: gildRows, error: gildErr } = await withTimeout(
+    c.db.from('gilded').select('hexagram_ids').eq('uid', c.uid)
+  )
+  if (!gildErr && Array.isArray(gildRows) && gildRows.length) {
+    const local = normIds(read(K_GILDED, []))
+    const merged = normIds([...local, ...(gildRows[0].hexagram_ids || [])])
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      write(K_GILDED, merged)
+      notifySynced()
+    }
+  }
+
   /* 累计进度里的错题集合：单独存一份本地镜像，作为错题本的补充来源 */
   const { data: progRows, error: progErr } = await withTimeout(
     c.db.from('study_progress').select('wrong_ids').eq('uid', c.uid)
@@ -232,6 +245,15 @@ const pushFavoriteAdd = (hexagramId) =>
 
 const pushFavoriteRemove = (hexagramId) =>
   pushSilent((c) => c.db.from('favorites').delete().eq('uid', c.uid).eq('hexagram_id', hexagramId))
+
+/** 镀金上推：整列 upsert（本地并集为准；云端无则建行） */
+const pushGilded = () =>
+  pushSilent((c) =>
+    c.db.from('gilded').upsert(
+      { uid: c.uid, hexagram_ids: normIds(read(K_GILDED, [])), updated_at: new Date().toISOString() },
+      { onConflict: 'uid' }
+    )
+  )
 
 const pushRound = (round) =>
   pushSilent((c) => c.db.from('study_rounds').insert({ uid: c.uid, score: round.score, total: round.total }))
@@ -349,7 +371,9 @@ export function loadGilded() {
 export function addGilded(hexagramId) {
   const list = read(K_GILDED, [])
   if (list.includes(hexagramId)) return false
-  return write(K_GILDED, [...list, hexagramId])
+  const ok = write(K_GILDED, [...list, hexagramId])
+  if (ok) pushGilded() // 云端备份（静默；成就换设备也能带回来）
+  return ok
 }
 
 /** F3 记忆测验的进度 —— 本期**唯一的「写入」功能**（PRD F3） */
