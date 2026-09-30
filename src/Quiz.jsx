@@ -5,7 +5,7 @@ import QuizInkBackground from './QuizInkBackground.jsx'
 import QuizInkSweep from './QuizInkSweep.jsx'
 import SourceTag from './SourceTag.jsx'
 import * as store from './storage.js'
-import { makeRound, QUESTIONS_PER_ROUND } from './quiz.js'
+import { makeRound, QUESTIONS_PER_ROUND, PASS_MIN } from './quiz.js'
 
 const byId = (id) => data.items.find((h) => h.id === id)
 const YAO_LABEL = ['初', '二', '三', '四', '五', '上']
@@ -21,16 +21,14 @@ const YAO_LABEL = ['初', '二', '三', '四', '五', '上']
  *   ① **答错后必须立刻看到正确答案** → 全程本地判定
  *   ② **同一轮内不出重复题** → 由 quiz.js 的洗牌保证
  */
-export default function Quiz({ onOpenDetail, onBack }) {
+export default function Quiz({ onOpenDetail, onBack, onCeremony }) {
   const [round, setRound] = useState(() => makeRound(data.items))
   const [index, setIndex] = useState(0)
   const [built, setBuilt] = useState([]) // 已摆的爻（自初爻往上），元素为 1(阳)/0(阴)
   const [judged, setJudged] = useState(false)
   const [correct, setCorrect] = useState(0)
   const [wrongIds, setWrongIds] = useState([])
-  const [result, setResult] = useState(null) // { score, total, rewardId, claimed }
   const [sweep, setSweep] = useState(false) // 下一题的黑墨翻涌转场进行中
-  const [claimed, setClaimed] = useState(false)
 
   const q = round[index]
   const target = byId(q.id)
@@ -71,12 +69,19 @@ export default function Quiz({ onOpenDetail, onBack }) {
       setSweep(true) // 黑墨翻涌遮屏 → 遮满一瞬换题 → 散开露新题
       return
     }
-    // 最后一题答完 → 记成绩，并抽出奖励卦（从未镀金的卦里随机，不重复）
+    // 最后一题答完 → 记成绩 → 终局仪式（未达容错：黑云劝慰；达成：白云 + 门庭 + 镀金卦象）
     store.saveQuizRound({ score: correct, total: round.length, answeredIds: round.map((r) => r.id), wrongIds })
-    const gilded = new Set(store.loadGilded())
-    const pool = data.items.map((h) => h.id).filter((id) => !gilded.has(id))
-    const rewardId = pool.length && correct >= 6 ? pool[Math.floor(Math.random() * pool.length)] : null
-    setResult({ score: correct, total: round.length, rewardId, claimed: false })
+    const passed = correct >= PASS_MIN
+    let rewardId = null
+    if (passed) {
+      const gilded = new Set(store.loadGilded())
+      const pool = data.items.map((h) => h.id).filter((id) => !gilded.has(id))
+      if (pool.length) {
+        rewardId = pool[Math.floor(Math.random() * pool.length)]
+        store.addGilded(rewardId) // 奖励即领：门后浮现的卦象就是已经镀金的它
+      }
+    }
+    onCeremony({ variant: passed ? 'pass' : 'fail', rewardId })
   }
 
   /* 墨遮满全屏的一瞬换题：新题的名字会按 nameShown 时序在墨散中浮出 */
@@ -86,128 +91,6 @@ export default function Quiz({ onOpenDetail, onBack }) {
     setJudged(false)
   }
   const handleSweepDone = () => setSweep(false)
-
-  const claimReward = () => {
-    if (!result || !result.rewardId || result.claimed) return
-    store.addGilded(result.rewardId)
-    setClaimed(true)
-    setResult({ ...result, claimed: true })
-  }
-
-  const restart = () => {
-    setRound(makeRound(data.items))
-    setIndex(0)
-    setBuilt([])
-    setJudged(false)
-    setCorrect(0)
-    setWrongIds([])
-    setResult(null)
-    setClaimed(false)
-  }
-
-  /* ---------- 结果页 ---------- */
-  if (result) {
-    const summary = store.quizSummary()
-    const wrongBook = store.quizWrongBook()
-    const reward = result.rewardId ? byId(result.rewardId) : null
-
-    return (
-      <main className="page quiz quiz-ink">
-      <QuizInkBackground />
-        <div className="detail-bar">
-          <button type="button" className="back" onClick={onBack}>
-            ← 返回总表
-          </button>
-        </div>
-
-        <header className="head">
-          <h1>
-            本轮 {result.score} / {result.total}
-          </h1>
-          {result.rewardId ? (
-            <p className="sub">答对 6 题以上，示一枚新卦 —— 点击即可为它镀金</p>
-          ) : (
-            <p className="sub">6 题以上正确可得「镀金一卦」的奖励，再接再厉</p>
-          )}
-        </header>
-
-        {/* 奖励：随机出示一枚未镀金的卦，点击领取 */}
-        {reward && (
-          <section className="q-reward" aria-live="polite">
-            <h2 className="q-reward-title">{claimed ? '已镀金' : '新卦出示'}</h2>
-            <button
-              type="button"
-              className={'q-reward-card' + (claimed ? ' is-claimed' : '')}
-              onClick={claimReward}
-              disabled={claimed}
-            >
-              <span className="q-reward-symbol" aria-hidden="true">
-                {reward.symbol}
-              </span>
-              <span className="q-reward-name">{reward.name}</span>
-              <span className="q-reward-meta">第 {reward.id} 卦 · {reward.judgment}</span>
-              <span className="q-reward-go">{claimed ? '金字已在总表点亮' : '点击领取 · 为它镀金'}</span>
-            </button>
-            <p className="q-reward-note">
-              镀金永久有效：这枚卦在卦象总表上的卦名与卦辞会变为金字。已镀过的卦不会再出示。
-            </p>
-          </section>
-        )}
-        {!reward && result.rewardId === null && result.score >= 6 && (
-          <p className="q-none">六十四卦已全部镀金 —— 再无新卦可出示，敬请收下这份完满。</p>
-        )}
-
-        <section className="block">
-          <h2 className="block-title">这一轮答错的</h2>
-          {wrongIds.length ? (
-            <ul className="q-wrong-list">
-              {wrongIds.map((id) => {
-                const h = byId(id)
-                return (
-                  <li key={id}>
-                    <button type="button" className="q-wrong-item" onClick={() => onOpenDetail(id)}>
-                      <span className="q-wrong-symbol" aria-hidden="true">
-                        {h.symbol}
-                      </span>
-                      <span className="q-wrong-name">{h.name}</span>
-                      <span className="q-wrong-id">第 {id} 卦</span>
-                      <span className="q-wrong-go">去读这一卦 →</span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          ) : (
-            <p className="q-none">这一轮全对，没有错题。</p>
-          )}
-        </section>
-
-        <section className="block">
-          <h2 className="block-title">累计</h2>
-          <p className="q-sum">
-            已测 <b>{summary.rounds}</b> 轮 · 共 <b>{summary.answered}</b> 题 · 正确率{' '}
-            <b>{Math.round(summary.accuracy * 100)}%</b> · 最好一次 <b>{summary.best}</b> 题
-          </p>
-          <p className="q-sum-soft">
-            错题本里还有 {wrongBook.length} 卦没答对过（答对过一次就会移出）。
-          </p>
-          <SourceTag
-            kind="ours"
-            note="测验进度与镀金只写在这台设备的浏览器里；不采集任何身份信息，也没有上传（云端同步尚未接入）"
-          />
-        </section>
-
-        <div className="cr-actions q-actions">
-          <button type="button" className="cr-btn cr-btn-primary" onClick={restart}>
-            再来一轮
-          </button>
-          <button type="button" className="cr-btn" onClick={onBack}>
-            回总表
-          </button>
-        </div>
-      </main>
-    )
-  }
 
   /* ---------- 答题：出示卦名，用户拼卦象 ---------- */
   return (
@@ -304,13 +187,13 @@ export default function Quiz({ onOpenDetail, onBack }) {
       {judged && (
         <div className="cr-actions q-actions">
           <button type="button" className="cr-btn cr-btn-primary" onClick={advance}>
-            {isLast ? '看成绩' : '下一题'}
+            {isLast ? '礼成' : '下一题'}
           </button>
         </div>
       )}
 
       <p className="q-foot">
-        一轮 {QUESTIONS_PER_ROUND} 题 · 同一轮不重复 · 答对 6 题以上随机出示一枚未镀金的卦，点击即镀金
+        一轮 {QUESTIONS_PER_ROUND} 题 · 同一轮不重复 · 最多错 3 道 · 达成后门庭深处会出示一枚未镀金的卦，点击即镀金
       </p>
 
       {sweep && <QuizInkSweep onCovered={handleSweepCovered} onDone={handleSweepDone} />}

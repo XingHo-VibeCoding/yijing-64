@@ -9,6 +9,9 @@
  * 因此旧的「干扰项」规则（相邻卦序 / 同族卦）随旧题型一并移除。
  */
 
+/** 容错率：8 题里最多错 3 道（答对 ≥5 即达成） */
+export const PASS_MIN = 5
+
 export const QUESTIONS_PER_ROUND = 8
 
 /**

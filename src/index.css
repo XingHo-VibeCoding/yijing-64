@@ -1320,3 +1320,68 @@ body {
 .rec-backup-code:focus-visible,
 .rec-backup-input:focus-visible { outline: 2px solid rgba(111, 83, 48, .65); outline-offset: 1px; }
 .rec-backup-msg { margin: 12px 0 0; font-size: 13px; color: #6f5330; }
+
+/* ============================================================
+   Day 12 · 测验终局仪式（QuizCeremony）：黑云劝慰 / 白云 + 门庭 + 镀金卦象
+   大字用毛笔隶书栈（LiSu → STLiti → KaiTi 兜底）
+   ============================================================ */
+.qc-root { position: fixed; inset: 0; z-index: 90; cursor: pointer; }
+.qc-root canvas { display: block; width: 100%; height: 100%; }
+
+.qc-motto {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 100%; text-align: center; pointer-events: none;
+  font-family: 'LiSu', '隶书', 'STLiti', '华文隶书', 'KaiTi', 'SimSun', serif;
+  font-size: clamp(46px, 7.5vw, 96px);
+  letter-spacing: 0.14em; text-indent: 0.14em;
+  animation: qcFade 800ms ease-out both;
+}
+.qc-motto.fail {
+  color: #f5f1e8;
+  text-shadow: 0 0 26px rgba(0, 0, 0, .65), 0 2px 4px rgba(0, 0, 0, .5);
+}
+.qc-motto.pass {
+  background: linear-gradient(180deg, #ecd3a0 8%, #cf9f56 55%, #a5793a 92%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 2px 12px rgba(20, 14, 6, .55));
+}
+
+.qc-reward {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none;
+  animation: qcFade 1100ms ease-out both;
+}
+.qc-reward-symbol {
+  font-size: clamp(140px, 24vw, 300px); line-height: 1.15;
+  background: linear-gradient(180deg, #ffedb4 6%, #f2c65e 52%, #c8912a 92%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 26px rgba(255, 224, 150, .55));
+}
+.qc-reward-name {
+  margin-top: 4px;
+  font-family: 'LiSu', '隶书', 'STLiti', '华文隶书', 'KaiTi', serif;
+  font-size: clamp(40px, 6vw, 76px); letter-spacing: 0.28em; text-indent: 0.28em;
+  background: linear-gradient(180deg, #f4dc9e, #cf9f56 60%, #a5793a);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 14px rgba(255, 224, 150, .4));
+}
+
+.qc-hint {
+  position: absolute; bottom: 5.5%; width: 100%; text-align: center;
+  font-size: 14px; letter-spacing: 0.4em; text-indent: 0.4em;
+  color: rgba(255, 255, 255, .5); pointer-events: none;
+  animation: qcHint 1.6s ease-out 1s both;
+}
+@keyframes qcFade {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes qcHint { from { opacity: 0; } to { opacity: 1; } }
+
+/* Day 12 · 仪式层补正：白云遮屏时题字要用更深的砂金 + 提示转深墨（浅底可读） */
+.qc-motto.pass {
+  background: linear-gradient(180deg, #dcb977 6%, #b8863a 55%, #8d6320 92%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 2px 14px rgba(70, 46, 14, .5));
+}
+.qc-root.is-light .qc-hint { color: rgba(40, 34, 26, .5); }

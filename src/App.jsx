@@ -9,6 +9,7 @@ import Quiz from './Quiz.jsx'
 import SourceTag from './SourceTag.jsx'
 import InkTransition from './InkTransition.jsx'
 import MistTransition from './MistTransition.jsx'
+import QuizCeremony from './QuizCeremony.jsx'
 import * as store from './storage.js'
 import { fetchHexagrams, mockMode } from './mockApi.js'
 
@@ -189,6 +190,7 @@ export default function App() {
 
   /* ---------- 进测验的「坠入仙境」转场（云雾 → 墨涌 → 露测验页） ---------- */
   const [mistTrans, setMistTrans] = useState(false)
+  const [ceremony, setCeremony] = useState(null) // 测验终局仪式：{ variant, rewardId }
   const startQuizTransition = () => {
     if (transition || mistTrans) return // 一次只跑一个转场
     setMistTrans(true)
@@ -442,6 +444,7 @@ export default function App() {
   if (view === 'quiz') {
     viewNode = (
       <Quiz
+        onCeremony={(c) => setCeremony(c)}
         onOpenDetail={(id) => openDetail(id, 'list')}
         onBack={() => {
           setView('list')
@@ -543,7 +546,7 @@ export default function App() {
               {quizSum.rounds} 轮 · 正确率 {Math.round(quizSum.accuracy * 100)}% · 已镀金 {gildedSet.size} / 64 卦
             </span>
           ) : (
-            <span className="my-records-n">已镀金 {gildedSet.size} / 64 卦 · 一轮 8 题 · 答对 6 题再镀一卦</span>
+            <span className="my-records-n">已镀金 {gildedSet.size} / 64 卦 · 一轮 8 题 · 答对 5 题再镀一卦</span>
           )}
         </button>
 
@@ -704,6 +707,17 @@ export default function App() {
       {viewNode}
       {overlay}
       {mist}
+      {ceremony && (
+        <QuizCeremony
+          variant={ceremony.variant}
+          reward={ceremony.rewardId ? data.items.find((h) => h.id === ceremony.rewardId) : null}
+          onCovered={() => {
+            setView('list')
+            go('#/')
+          }}
+          onHome={() => setCeremony(null)}
+        />
+      )}
     </>
   )
 }
