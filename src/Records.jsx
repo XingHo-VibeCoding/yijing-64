@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import hexData from '../data/64卦.json'
 import SourceTag from './SourceTag.jsx'
+import * as store from './storage.js'
 
 const ITEM = (id) => hexData.items.find((h) => h.id === id)
 const ORDER = ['初', '二', '三', '四', '五', '上']
@@ -30,6 +31,10 @@ function yaoLabels(hex, positions) {
 export default function Records({ records, favorites, quizRounds = 0, onOpen, onClear, onToggleFav, onBack }) {
   const [tab, setTab] = useState('records')
   const [confirming, setConfirming] = useState(false)
+  /* 进度码（换设备带走进度）：只有日期/卦序/变爻/收藏/镀金/成绩，不含身份信息 */
+  const [code, setCode] = useState('')
+  const [importText, setImportText] = useState('')
+  const [msg, setMsg] = useState('')
   // ⚠️ 测验进度（F3）也算「有记录」—— 否则只测过一轮、还没起过卦时，
   //    这个页面会显示成空的，「清空我的记录」按钮就不出现，进度再也清不掉
   const empty = records.length === 0 && favorites.length === 0 && quizRounds === 0
@@ -144,6 +149,93 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
           )}
         </section>
       )}
+
+      {/* 进度码：换设备带走进度（导出 / 导入，不经服务器） */}
+      <section className="rec-backup">
+        <h2 className="rec-backup-title">换设备带走进度</h2>
+        <p className="rec-backup-note">
+          进度码里只有日期、卦序、变爻、收藏、镀金与成绩 —— <b>不含任何身份信息</b>，
+          也不会经过我们的服务器。在另一台设备打开本页，粘贴这串码即可恢复。
+        </p>
+
+        <div className="rec-backup-row">
+          <button
+            type="button"
+            className="rec-btn"
+            onClick={() => {
+              try {
+                setCode(store.exportBackupCode())
+                setMsg('进度码已生成，复制走即可')
+              } catch (e) {
+                setMsg('生成失败：' + ((e && e.message) || '未知错误'))
+              }
+            }}
+          >
+            生成进度码
+          </button>
+          {code && (
+            <button
+              type="button"
+              className="rec-btn"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(code)
+                  setMsg('已复制到剪贴板')
+                } catch {
+                  setMsg('复制失败 —— 请手动选中下面的码复制')
+                }
+              }}
+            >
+              复制
+            </button>
+          )}
+        </div>
+
+        {code && (
+          <textarea
+            className="rec-backup-code"
+            readOnly
+            rows={3}
+            value={code}
+            aria-label="进度码"
+            onFocus={(e) => e.target.select()}
+          />
+        )}
+
+        <div className="rec-backup-row">
+          <input
+            className="rec-backup-input"
+            type="text"
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder="粘贴进度码（YJ64-…）"
+            aria-label="粘贴进度码"
+          />
+          <button
+            type="button"
+            className="rec-btn"
+            onClick={() => {
+              try {
+                const r = store.importBackupCode(importText)
+                setMsg(
+                  `已合并：记录 +${r.records} · 收藏 +${r.favorites} · 镀金 +${r.gilded} · 成绩 +${r.rounds}`
+                )
+                setImportText('')
+              } catch (e) {
+                setMsg(((e && e.message) || '导入失败') + '')
+              }
+            }}
+          >
+            导入并合并
+          </button>
+        </div>
+
+        {msg && (
+          <p className="rec-backup-msg" role="status">
+            {msg}
+          </p>
+        )}
+      </section>
 
       <SourceTag
         kind="ours"

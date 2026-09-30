@@ -449,3 +449,134 @@ export function clearAll() {
 export function counts() {
   return { records: loadRecords().length, favorites: loadFavorites().length }
 }
+
+/* ============================================================================
+ * 进度码（换设备带走进度）—— 方案 A′：不采身份信息、不经服务器、纯前端
+ * 导出：记录 / 收藏 / 镀金 / 成绩 → 紧凑 JSON → base64url，前缀 YJ64-
+ * 导入：解析后**并集**进本地（只增不覆盖），随后照常静默上云
+ * ========================================================================== */
+
+const BACKUP_PREFIX = 'YJ64-'
+
+function b64urlEncode(str) {
+  const bytes = new TextEncoder().encode(str)
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function b64urlDecode(s) {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : ''
+  const bin = atob(b64 + pad)
+  const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
+/** @returns {string} 进度码（YJ64-…） */
+export function exportBackupCode() {
+  const payload = {
+    v: 1,
+    r: loadRecords().map((x) => [x.date, x.hexagramId, (x.changingLines || []).join('')]),
+    f: normIds(loadFavorites().map((x) => x.hexagramId)),
+    g: normIds(loadGilded()),
+    q: loadQuizRounds().map((x) => [
+      x.date,
+      x.score,
+      x.total,
+      (x.answeredIds || []).join('.'),
+      (x.wrongIds || []).join('.'),
+    ]),
+  }
+  return BACKUP_PREFIX + b64urlEncode(JSON.stringify(payload))
+}
+
+/**
+ * 导入进度码并与本地合并（只增不覆盖，本地已有的键以本地为准）
+ * @throws {Error} 码不认识 / 解析失败时抛出可理解的中文错误
+ * @returns {{records:number, favorites:number, gilded:number, rounds:number}} 各类新增条数
+ */
+export function importBackupCode(code) {
+  const raw = String(code || '').trim()
+  if (!raw) throw new Error('请先粘贴进度码')
+  if (!raw.startsWith(BACKUP_PREFIX)) throw new Error('这不像本项目的进度码（应以 YJ64- 开头）')
+
+  let payload
+  try {
+    payload = JSON.parse(b64urlDecode(raw.slice(BACKUP_PREFIX.length)))
+  } catch {
+    throw new Error('进度码无法解析，多半是复制时缺了一段——请重新完整复制一次')
+  }
+  if (!payload || payload.v !== 1) throw new Error('这个进度码的版本不认识')
+
+  // 起卦记录：按日期补缺（一天一条，本地已有则保留本地）
+  const recs = loadRecords()
+  const byDate = new Map(recs.map((r) => [r.date, r]))
+  let addR = 0
+  for (const row of payload.r || []) {
+    const [date, hid, lines] = row || []
+    if (!date || !Number.isInteger(hid) || hid < 1 || hid > 64 || byDate.has(date)) continue
+    byDate.set(date, {
+      date,
+      hexagramId: hid,
+      changingLines: normChanging(String(lines || '').split('').map(Number)), // split 出来是字符串，必须转数字否则被 normChanging 过滤掉
+    })
+    addR += 1
+  }
+  if (addR) {
+    const merged = [...byDate.values()].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    write(K_RECORDS, merged)
+  }
+
+  // 收藏：补缺
+  const favs = loadFavorites()
+  const favIds = new Set(favs.map((f) => f.hexagramId))
+  let addF = 0
+  for (const id of normIds(payload.f)) {
+    if (favIds.has(id)) continue
+    favs.push({ hexagramId: id, date: todayKey() })
+    favIds.add(id)
+    addF += 1
+  }
+  if (addF) write(K_FAVORITES, favs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)))
+
+  // 镀金：并集（成就只增不减）
+  const gilded = normIds(loadGilded())
+  const mergedG = normIds([...gilded, ...normIds(payload.g)])
+  const addG = mergedG.length - gilded.length
+  if (addG) write(K_GILDED, mergedG)
+
+  // 成绩流水：按 日期+得分+题数 去重补缺
+  const rounds = loadQuizRounds()
+  const seen = new Set(rounds.map((r) => `${r.date}|${r.score}|${r.total}`))
+  let addQ = 0
+  for (const row of payload.q || []) {
+    const [date, score, total, a, w] = row || []
+    if (!date) continue
+    const key = `${date}|${score}|${total}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    rounds.push({
+      date,
+      score: score || 0,
+      total: total || 0,
+      answeredIds: normIds(String(a || '').split('.').map(Number)),
+      wrongIds: normIds(String(w || '').split('.').map(Number)),
+    })
+    addQ += 1
+  }
+  if (addQ) write(K_QUIZ, rounds.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)))
+
+  // 导入的内容也照常备份上云（记录/收藏/镀金 upsert 幂等；成绩流水是只增表，不重复推）
+  try {
+    for (const r of byDate.values()) pushRecord(r)
+    for (const id of favIds) pushFavoriteAdd(id)
+    pushGilded()
+    pushProgress()
+  } catch {
+    /* 静默：本地已生效 */
+  }
+
+  notifySynced() // 让页面立刻重读
+  return { records: addR, favorites: addF, gilded: addG, rounds: addQ }
+}
