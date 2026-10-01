@@ -1331,7 +1331,12 @@ body {
 /* 前景薄雾层：压在题字之上，让字像浮在烟里、与烟一起流 */
 .qc-root .qc-fg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
-/* 题字：毛笔行书栈（华文行楷最贴参考图）+ 繁体；逐字独立浮动与呼吸 */
+/* 题字：毛笔行书栈（华文行楷最贴参考图）+ 繁体。
+   节奏由 JS 逐字发（`mottoSequence`，见 QuizCeremony.jsx）：**从左往右、逐字浮现**，
+   逗号处（＝左右两句之间）多停一拍 —— 所以是「左句先、右句后」，不是一拥而上。
+   每个字只有**一次**动效：从雾里显形（大模糊 + 略偏上 + 略大）→ 自上而下落定 → **定住**。
+   ⚠️ 用户明确要求「不要呼吸」：原来那套浮动 + 呼吸的无限交替已删除 ——
+   会晃的字是「飘」，不是「庄重」；诏书的字落下去就不动了。 */
 .qc-motto {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   display: flex; justify-content: center; align-items: baseline;
@@ -1346,20 +1351,17 @@ body {
   position: relative;
   display: inline-block;
   will-change: transform, filter, opacity;
-  animation-name: qcCharFlow, qcCharBreathe;
-  animation-timing-function: ease-in-out, ease-in-out;
-  animation-iteration-count: infinite, infinite;
-  animation-direction: alternate, alternate;
+  animation-name: qcCharRise;
+  animation-timing-function: cubic-bezier(.18, .72, .26, 1); /* 起手快、落定慢 = 有分量 */
+  animation-iteration-count: 1;
+  animation-fill-mode: both;
 }
-@keyframes qcCharFlow {
-  from { transform: translate3d(-5px, -7px, 0) rotate(-.6deg); }
-  to { transform: translate3d(7px, 8px, 0) rotate(.7deg); }
+@keyframes qcCharRise {
+  0% { opacity: 0; filter: blur(16px); transform: translate3d(0, -12px, 0) scale(1.06); }
+  46% { opacity: 1; filter: blur(0px); }
+  100% { opacity: 1; filter: blur(0px); transform: translate3d(0, 0, 0) scale(1); }
 }
-@keyframes qcCharBreathe {
-  from { filter: blur(.4px); opacity: .8; }
-  to { filter: blur(2.8px); opacity: 1; }
-}
-/* 字边缘的虚化云气：同字模糊影压在字后（跟着字的浮动一起动） */
+/* 字边缘的虚化云气：同字模糊影压在字后（与被虚化的字一起浮现） */
 .qc-motto-ch::after {
   content: attr(data-ch);
   position: absolute; left: 50%; top: 50%;

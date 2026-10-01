@@ -58,6 +58,25 @@ const easeOut = (t) => 1 - Math.pow(1 - t, 3)
 
 const MOTTO = { fail: '運隨時變，切勿焦躁', pass: '靜神定心，自有所得' }
 
+/* 题字的浮现节奏（用户要求：不要呼吸、从左往右、分左右两句依次浮现，像诏书）
+ *   · 逐字间隔恒定 → 匀速，才有「一字一字落下来」的秩序感（忽快忽慢会显得俏皮）
+ *   · 逗号处多停一拍 → 左右两句自然分成两段：第一句落定，第二句才起
+ *   · 每字只浮现一次（CSS 侧 iteration-count: 1 + fill both），落定即静止 */
+const CH_STEP = 0.19 // 逐字间隔（秒）
+const CH_DUR = 1.35 // 单字浮现时长
+const SENTENCE_GAP = 0.42 // 左右两句之间的停顿
+function mottoSequence(text) {
+  const chars = [...text]
+  const out = []
+  let delay = 0
+  for (let i = 0; i < chars.length; i++) {
+    if (i > 0 && chars[i - 1] === '，') delay += SENTENCE_GAP
+    out.push({ ch: chars[i], delay, dur: CH_DUR })
+    delay += CH_STEP
+  }
+  return out
+}
+
 /* 水墨调色：刻意避纯黑 —— 飘渺神秘优先，黑云也带灰调 */
 const C = {
   paper: '246, 244, 240',
@@ -466,15 +485,13 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
 
       {phase === 'motto' && (
         <div className={'qc-motto ' + (variant === 'pass' ? 'pass' : 'fail')}>
-          {[...text].map((ch, i) => (
+          {mottoSequence(text).map(({ ch, delay, dur }, i) => (
             <span
               key={i}
               className="qc-motto-ch"
               data-ch={ch}
-              style={{
-                animationDelay: `${(i * 0.42).toFixed(2)}s, ${(i * 0.63).toFixed(2)}s`,
-                animationDuration: `${(5.2 + (i % 3) * 0.9).toFixed(1)}s, ${(3.4 + (i % 4) * 0.5).toFixed(1)}s`,
-              }}
+              data-delay={delay.toFixed(2)}
+              style={{ animationDelay: `${delay.toFixed(2)}s`, animationDuration: `${dur.toFixed(2)}s` }}
             >
               {ch}
             </span>
