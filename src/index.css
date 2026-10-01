@@ -1415,7 +1415,9 @@ body {
   font-size: clamp(140px, 24vw, 300px); line-height: 1.15;
   background: linear-gradient(180deg, #ffedb4 6%, #f2c65e 52%, #c8912a 92%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 0 26px rgba(255, 224, 150, .55));
+  /* 背后垫了白云气之后，金色对白底其实偏淡：加一层**深色**投影把爻块从云里托出来
+     （发光在白底上只会更糊 —— 这个项目反复踩到的同一条） */
+  filter: drop-shadow(0 3px 10px rgba(120, 78, 16, .4)) drop-shadow(0 0 22px rgba(255, 224, 150, .45));
 }
 .qc-reward-name {
   margin-top: 4px;

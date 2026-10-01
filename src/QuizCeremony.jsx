@@ -346,6 +346,41 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
           ctx.fillRect(0, 0, W, H)
         }
       }
+
+      /* ---- 镀金卦象背后：白色云气（用户要求「不然看不清」）----
+         卦象是金色、山水是浅色，两边的明度贴得很近，加上山石的细线条还跟笔画绞在一起，
+         所以「看不清」。这里垫一层**白色翻涌的云气** —— 作用是「衬」不是「遮」：
+         先把背后那片杂纹理虚掉，金色才有干净的底可依（浓度上限压在 0.6 左右，别糊成一片白）。 */
+      const rk = clamp01((ek - 0.7) / 0.3) // 进门快完成时才起，别抢了进门那一下
+      if (rk > 0.01) {
+        const mc = W / 2
+        const mr = H * 0.48
+        const unit = Math.min(W, H)
+        // 云团要**围着卦象聚**、别铺满：铺满等于给整幅画加了一层白滤镜，
+        // 山水会发灰发白，而云团自己也看不出形状（试过，全屏那版就是这个问题）。
+        // 现在的量：覆盖中央约 76% 宽 / 77% 高，四角留出山水。
+        for (let i = 0; i < 14; i++) {
+          const ph = i * 1.53
+          const ang = ph + t * 0.00026 * (0.6 + (i % 5) * 0.2) // 绕中心旋涌
+          const dist = (0.06 + (0.14 * ((i * 7) % 10)) / 10) * unit
+          const x = mc + Math.cos(ang) * dist * 1.8 + Math.sin(t * 0.0017 + ph) * 48 * S
+          const y = mr + Math.sin(ang) * dist * 0.75 + Math.cos(t * 0.0019 + ph) * 32 * S
+          // 半径与浓度都带**大幅**脉动 —— 「翻涌」全靠这个；幅度一小就成了一片静止的白斑
+          const r = (130 + (i % 4) * 62) * S * (1 + 0.28 * Math.sin(t * 0.0022 * (0.7 + (i % 3) * 0.25) + ph))
+          const a = (0.3 + 0.24 * Math.sin(t * 0.0025 + ph)) * rk
+          if (a <= 0.01) continue
+          soft(x, y, r, i % 5 === 0 ? C.mist1 : C.paper, Math.min(0.56, a))
+        }
+        // 几道横向流丝掠过卦象 —— 「流」的感觉靠这个，纯圆团堆在一起只会像斑点
+        for (let i = 0; i < 6; i++) {
+          const ph = i * 2.1
+          const y = mr + (i - 2.5) * 44 * S + Math.cos(t * 0.0016 + ph) * 22 * S
+          const x = mc + Math.sin(t * 0.0013 + ph) * 95 * S
+          softEll(x, y, (300 + (i % 3) * 90) * S, (34 + (i % 3) * 12) * S, C.paper, (0.24 + 0.14 * Math.sin(t * 0.0019 + ph)) * rk)
+        }
+        // 正中垫一团（卦象正下方才是「看不清」最重的地方）：浓度也一起脉动，别做成一块静止的白
+        soft(mc, mr, unit * 0.3 * (1 + 0.08 * Math.sin(t * 0.0015)), C.paper, (0.3 + 0.11 * Math.sin(t * 0.0014)) * rk)
+      }
     }
 
     const frame = (now) => {
