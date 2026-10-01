@@ -181,7 +181,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
     const isPass = variant === 'pass'
     // 音效：环境风声整场都在（先做一个「远」），各相位的乐器声见下面的 phase effect
     primeCeremonyAudio()
-    windOn(isPass ? 0.1 : 0.075, 3.2)
+    windOn(isPass ? 0.062 : 0.05, 3.6)
     const mist = makeMist(72)
     const start = performance.now()
     st.current.pt = start

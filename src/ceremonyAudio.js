@@ -24,6 +24,32 @@ try {
   muted = false
 }
 
+const MASTER = 0.72 // 比原来的 0.9 低：湿声会叠加响度，留出余量才不吵
+
+/**
+ * 程序生成一段「大空间」脉冲响应：指数衰减的噪声尾巴 + 22ms 预延迟。
+ * 空灵的第一要素就是**混响** —— 干声永远显得「近、吵」；
+ * 而空灵要的是「长而柔」，所以尾巴衰减得慢（2.8 次幂）而不是「啪」地断掉。
+ */
+function makeIR(a, seconds = 3.8, decay = 2.8) {
+  const sr = a.sampleRate
+  const len = Math.max(1, Math.round(sr * seconds))
+  const buf = a.createBuffer(2, len, sr)
+  const pre = Math.round(sr * 0.022)
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch)
+    for (let i = 0; i < len; i++) {
+      if (i < pre) {
+        d[i] = 0
+        continue
+      }
+      const t = (i - pre) / (len - pre)
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay)
+    }
+  }
+  return buf
+}
+
 let broken = false // 一旦建不起来就彻底放弃，别再反复试（无头 / 无音频设备的环境）
 const supported = () =>
   !broken && typeof window !== 'undefined' && !!(window.AudioContext || window.webkitAudioContext)
@@ -36,8 +62,24 @@ function ctx() {
       const AC = window.AudioContext || window.webkitAudioContext
       actx = new AC()
       master = actx.createGain()
-      master.gain.value = muted ? 0 : 0.9
-      master.connect(actx.destination)
+      master.gain.value = muted ? 0 : MASTER
+      // 干 / 湿两条支路。混响不是「加效果」，是把声音从「贴脸」推到「远处」——
+      // 用户说的「嘈杂」，一半是干声太近造成的。
+      const dry = actx.createGain()
+      dry.gain.value = 0.6
+      const wet = actx.createGain()
+      wet.gain.value = 0.45
+      const conv = actx.createConvolver()
+      conv.buffer = makeIR(actx)
+      const damp = actx.createBiquadFilter()
+      damp.type = 'lowpass'
+      damp.frequency.value = 7000 // 削掉混响尾巴里最刺的那点高频
+      master.connect(dry)
+      dry.connect(actx.destination)
+      master.connect(wet)
+      wet.connect(conv)
+      conv.connect(damp)
+      damp.connect(actx.destination)
     }
     if (actx.state === 'suspended') actx.resume().catch(() => {})
   } catch {
@@ -63,7 +105,7 @@ export function setMuted(m) {
   }
   if (master && actx) {
     master.gain.cancelScheduledValues(actx.currentTime)
-    master.gain.linearRampToValueAtTime(muted ? 0 : 0.9, actx.currentTime + 0.25)
+    master.gain.linearRampToValueAtTime(muted ? 0 : MASTER, actx.currentTime + 0.25)
   }
 }
 
@@ -97,12 +139,17 @@ function pluckBuffer(a, freq, dur) {
   const buf = a.createBuffer(1, len, sr)
   const d = buf.getChannelData(0)
   const ring = new Float32Array(N)
-  for (let i = 0; i < N; i++) ring[i] = Math.random() * 2 - 1
+  // 激励用**低通白噪声**：纯白噪声的起音是「嚓」的一声，很吵；滤过之后才是「拨」
+  let lp = 0
+  for (let i = 0; i < N; i++) {
+    lp = lp * 0.68 + (Math.random() * 2 - 1) * 0.32
+    ring[i] = lp
+  }
   let idx = 0
   for (let i = 0; i < len; i++) {
     const cur = ring[idx]
     const nxt = ring[(idx + 1) % N]
-    ring[idx] = (cur + nxt) * 0.5 * 0.9965 // 0.9965 → 余韵悠长（古琴的散音）
+    ring[idx] = (cur + nxt) * 0.5 * 0.998 // 0.9965 → 0.998：余韵更长、散得更开
     d[i] = cur
     idx = (idx + 1) % N
   }
@@ -118,7 +165,7 @@ export function pluck(freq, gain = 0.5, dur = 3.4, delay = 0) {
   src.buffer = pluckBuffer(a, freq, dur)
   const lp = a.createBiquadFilter()
   lp.type = 'lowpass'
-  lp.frequency.value = Math.min(6500, freq * 14)
+  lp.frequency.value = Math.min(4000, freq * 9) // 收掉高频：音色从「近」变「远」
   lp.Q.value = 0.4
   const hp = a.createBiquadFilter()
   hp.type = 'highpass'
@@ -140,11 +187,11 @@ export function bell(base = 1180, gain = 0.22, dur = 3.2, delay = 0) {
   const a = ctx()
   if (!a || muted) return
   const t0 = a.currentTime + delay
+  // 去掉最高那层（5.27×）—— 它就是「叮」得刺耳、听着吵的来源
   const parts = [
     [1, 1, dur],
-    [2.41, 0.42, dur * 0.6],
-    [3.86, 0.22, dur * 0.4],
-    [5.27, 0.12, dur * 0.28],
+    [2.41, 0.34, dur * 0.55],
+    [3.86, 0.13, dur * 0.32],
   ]
   for (const [mul, amp, d] of parts) {
     const o = a.createOscillator()
@@ -177,11 +224,11 @@ export function windOn(level = 0.1, ramp = 2.5) {
   src.loop = true
   const bp = a.createBiquadFilter()
   bp.type = 'bandpass'
-  bp.frequency.value = 460
-  bp.Q.value = 0.55
+  bp.frequency.value = 320
+  bp.Q.value = 0.7
   const lp = a.createBiquadFilter()
   lp.type = 'lowpass'
-  lp.frequency.value = 1150
+  lp.frequency.value = 620 // 1150 → 620：白噪声的「沙沙」全在 1k 以上，砍掉才不吵
   const g = a.createGain()
   g.gain.setValueAtTime(0.0001, a.currentTime)
   g.gain.linearRampToValueAtTime(level, a.currentTime + ramp)
@@ -192,13 +239,22 @@ export function windOn(level = 0.1, ramp = 2.5) {
   lfoG.gain.value = level * 0.55
   lfo.connect(lfoG)
   lfoG.connect(g.gain)
+  // 再让带通频率缓慢漂移 —— 风的「呼吸」是频谱在动，不只是音量在动
+  // （只起伏音量会变成呼吸机，频谱漂移才是风）
+  const freqLfo = a.createOscillator()
+  freqLfo.frequency.value = 0.047
+  const freqG = a.createGain()
+  freqG.gain.value = 110
+  freqLfo.connect(freqG)
+  freqG.connect(bp.frequency)
   src.connect(bp)
   bp.connect(lp)
   lp.connect(g)
   g.connect(master)
   src.start()
   lfo.start()
-  wind = { src, gain: g, lfo }
+  freqLfo.start()
+  wind = { src, gain: g, lfo, freqLfo }
 }
 
 /** 风势：进门时扬起，收尾时退去 */
@@ -223,6 +279,7 @@ export function windOff(ramp = 1.6) {
     try {
       w.src.stop()
       w.lfo.stop()
+      if (w.freqLfo) w.freqLfo.stop()
     } catch {
       /* 已经停了 */
     }
@@ -233,33 +290,32 @@ export function windOff(ramp = 1.6) {
 
 /** 题字浮现：未达容错落在低音（劝慰、沉），达成落在高音（清、开）*/
 export function sfxMotto(pass) {
+  // 只留**纯五度**两个音：空五度没有三音，最空旷 —— 再加一记高铃就把「空」填满了
   if (pass) {
-    pluck(392.0, 0.34, 4.0) // G4 散音
-    pluck(587.33, 0.16, 3.0, 0.09) // D5
-    bell(1568, 0.1, 2.6, 0.16)
+    pluck(392.0, 0.26, 4.8) // G4 散音
+    pluck(587.33, 0.11, 3.8, 0.42) // D5（纯五度）
   } else {
-    pluck(130.81, 0.4, 4.6) // C3 低音，沉一点
-    pluck(196.0, 0.15, 3.4, 0.12) // G3
+    pluck(130.81, 0.3, 5.2) // C3
+    pluck(196.0, 0.1, 4.2, 0.5) // G3（纯五度）
   }
 }
 
 /** 进门：风扬起，配一声上行泛音（推门而入的那口气） */
 export function sfxDoor() {
-  windTo(0.22, 1.5)
-  pluck(293.66, 0.22, 3.6, 0.05) // D4
-  pluck(440.0, 0.14, 3.0, 0.5) // A4
-  bell(1046.5, 0.09, 2.4, 1.0)
+  windTo(0.13, 1.8)
+  pluck(293.66, 0.17, 4.2, 0.03) // D4
+  bell(880, 0.08, 3.4, 0.85) // A5：低一档、软一些
 }
 
 /** 镀金卦象浮现：一记清铃收束，风退回背景 */
 export function sfxReward() {
-  windTo(0.09, 2.2)
-  bell(1244.5, 0.2, 3.6)
-  pluck(523.25, 0.2, 3.6, 0.06) // C5
+  windTo(0.06, 2.6)
+  bell(987.77, 0.14, 4.4) // B5：1244.5 太亮太「叮」，降下八度的一半才配得上云气
+  pluck(523.25, 0.16, 4.2, 0.05) // C5
 }
 
 /** 收尾：风退、一声远钟 */
 export function sfxExit() {
-  bell(784, 0.14, 4.0)
-  windOff(2.2)
+  bell(659.25, 0.12, 5.0) // E5：远钟
+  windOff(2.6)
 }
