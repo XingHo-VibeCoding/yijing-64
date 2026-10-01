@@ -1331,34 +1331,50 @@ body {
 /* 前景薄雾层：压在题字之上，让字像浮在烟里、与烟一起流 */
 .qc-root .qc-fg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
-/* 题字：毛笔行书栈（华文行楷最贴参考图）+ 繁体。
-   节奏由 JS 逐字发（`mottoSequence`，见 QuizCeremony.jsx）：**从左往右、逐字浮现**，
-   逗号处（＝左右两句之间）多停一拍 —— 所以是「左句先、右句后」，不是一拥而上。
-   每个字只有**一次**动效：从雾里显形（大模糊 + 略偏上 + 略大）→ 自上而下落定 → **定住**。
+/* 题字：毛笔行书栈（华文行楷最贴参考图）+ 繁体。**竖排两列、右列先**（用户定稿：要像诏书）。
+   DOM 顺序 = 书写顺序（第一句在前），靠 `row-reverse` 摆成「右列在前」；
+   节奏由 JS 逐字发（`mottoColumns`，见 QuizCeremony.jsx）：列内自上而下逐字**落下**，
+   右列落齐停一拍后左列才起笔。每个字只有**一次**动效，落定即**静止**。
    ⚠️ 用户明确要求「不要呼吸」：原来那套浮动 + 呼吸的无限交替已删除 ——
    会晃的字是「飘」，不是「庄重」；诏书的字落下去就不动了。 */
 .qc-motto {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  display: flex; justify-content: center; align-items: baseline;
-  gap: .04em;
+  display: flex;
+  flex-direction: row-reverse; /* 右起：DOM 第一句 = 右边那一列 */
+  justify-content: center;
+  align-items: flex-start;
+  gap: .62em;
   width: 100%; pointer-events: none;
   font-family: 'STXingkai', '华文行楷', 'STXinwei', '华文新魏', 'FZShuTi', '方正舒体',
     'LiSu', '隶书', 'KaiTi', '楷体', serif;
-  font-size: clamp(48px, 8vw, 108px);
+  /* 竖排两列：字号按**视口高度**取（一列要放 4–5 字，用 vw 会在宽屏上撑爆） */
+  font-size: clamp(36px, 7.6vh, 80px);
   animation: qcFade 900ms ease-out both;
 }
+/* 竖排要**疏朗**才像诏书：字距、列距都放开（贴太近会看成「一列被劈成两半」） */
+.qc-motto-col { display: flex; flex-direction: column; align-items: center; gap: .18em; }
 .qc-motto-ch {
   position: relative;
-  display: inline-block;
+  display: block;
   will-change: transform, filter, opacity;
-  animation-name: qcCharRise;
-  animation-timing-function: cubic-bezier(.18, .72, .26, 1); /* 起手快、落定慢 = 有分量 */
+  animation-name: qcCharFall;
+  /* 「落下感」在缓动上是**加速下坠**：前段几乎不动（静止释放），后段猛地到位 ——
+     用「慢起慢停」出来的是「飘」，不是「落」。 */
+  animation-timing-function: cubic-bezier(.4, .04, .22, 1);
   animation-iteration-count: 1;
   animation-fill-mode: both;
 }
-@keyframes qcCharRise {
-  0% { opacity: 0; filter: blur(16px); transform: translate3d(0, -12px, 0) scale(1.06); }
-  46% { opacity: 1; filter: blur(0px); }
+/* 落下感要**分段**做，一锅炖就会变成「一边淡入一边往下飘」：
+   0–26%  **先显形**（字停在上方，只从雾里变实）—— 这一拍是「神秘」
+   26–70% **再落下**（字已经清晰，从 -0.8em 坠到位置）—— 这一拍才是「落」，而且看得见
+   70–100% 触底微沉 0.028em 再回正，像实物落地的那一记「顿」
+   两个要点：① 位移 0.8em 用 em（随字号缩放）② 清晰一定要早于位移到位，
+   否则字还在雾里就已经落地，人会以为它没落过。 */
+@keyframes qcCharFall {
+  0% { opacity: 0; filter: blur(22px); transform: translate3d(0, -0.92em, 0) scale(1.12); }
+  26% { opacity: 1; filter: blur(7px); transform: translate3d(0, -0.8em, 0) scale(1.09); }
+  42% { filter: blur(0px); transform: translate3d(0, -0.6em, 0) scale(1.05); }
+  70% { transform: translate3d(0, 0.028em, 0) scale(1.012); }
   100% { opacity: 1; filter: blur(0px); transform: translate3d(0, 0, 0) scale(1); }
 }
 /* 字边缘的虚化云气：同字模糊影压在字后（与被虚化的字一起浮现） */
@@ -1416,7 +1432,8 @@ body {
   position: absolute; bottom: 5.5%; width: 100%; text-align: center;
   font-size: 14px; letter-spacing: 0.4em; text-indent: 0.4em;
   color: rgba(255, 255, 255, .72); pointer-events: none;
-  animation: qcHint 1.6s ease-out 1s both;
+  /* 延迟交给 JS：题字相位要等整句落齐 + 静默之后才出现，别在字还没落齐时就把人带走 */
+  animation: qcHint 1.6s ease-out both;
 }
 @keyframes qcFade {
   from { opacity: 0; transform: translate(-50%, -47%) scale(.97); }

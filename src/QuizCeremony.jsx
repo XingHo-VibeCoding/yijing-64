@@ -58,23 +58,33 @@ const easeOut = (t) => 1 - Math.pow(1 - t, 3)
 
 const MOTTO = { fail: '運隨時變，切勿焦躁', pass: '靜神定心，自有所得' }
 
-/* 题字的浮现节奏（用户要求：不要呼吸、从左往右、分左右两句依次浮现，像诏书）
- *   · 逐字间隔恒定 → 匀速，才有「一字一字落下来」的秩序感（忽快忽慢会显得俏皮）
- *   · 逗号处多停一拍 → 左右两句自然分成两段：第一句落定，第二句才起
- *   · 每字只浮现一次（CSS 侧 iteration-count: 1 + fill both），落定即静止 */
-const CH_STEP = 0.19 // 逐字间隔（秒）
-const CH_DUR = 1.35 // 单字浮现时长
-const SENTENCE_GAP = 0.42 // 左右两句之间的停顿
-function mottoSequence(text) {
-  const chars = [...text]
-  const out = []
-  let delay = 0
-  for (let i = 0; i < chars.length; i++) {
-    if (i > 0 && chars[i - 1] === '，') delay += SENTENCE_GAP
-    out.push({ ch: chars[i], delay, dur: CH_DUR })
-    delay += CH_STEP
-  }
-  return out
+/* 题字节奏（用户 2026-10-01 定稿：**竖排两列、右列先**、要有「落下感」、落齐后要停够）
+ *
+ *   · 排版：逗号前后分成**左右两列**，右列先 —— 传统诏书 / 中式书写本来就是右起
+ *     （DOM 顺序 = 书写顺序＝第一句在前，摆成「右列在前」交给 CSS 的 `row-reverse`）
+ *   · 节奏：列内**自上而下**逐字落下；右列落齐、停一拍（COL_GAP），左列才起笔
+ *   · 每字只落一次（CSS 侧 iteration-count: 1 + fill both），**落定即静止**
+ *     —— 不要呼吸、不要浮动，会晃的字是「飘」，不是庄重
+ *
+ *  返回 { cols, finish }：cols 是两列的逐字时间表，finish 是整句落齐的时刻。
+ *  finish 用来把「点击继续」提示压到落齐之后 —— 提示提前冒出来会把手带走，字就白落了
+ *  （用户反馈的「停留时间太短」，根子在这里）。 */
+const CH_STEP = 0.19 // 同一列内逐字间隔
+const CH_DUR = 1.5 // 单字落下用时（要够长才看得见「落」）
+const COL_GAP = 0.55 // 右列落齐 → 左列起笔之间的停顿
+const HOLD_AFTER = 1.7 // 整句落齐后的静默
+function mottoColumns(text) {
+  const parts = text.split('，').filter(Boolean)
+  let cursor = 0
+  const cols = parts.map((s, ci) => {
+    if (ci > 0) cursor += COL_GAP
+    return [...s].map((ch) => {
+      const item = { ch, delay: cursor }
+      cursor += CH_STEP
+      return item
+    })
+  })
+  return { cols, finish: cursor - CH_STEP + CH_DUR }
 }
 
 /* 水墨调色：刻意避纯黑 —— 飘渺神秘优先，黑云也带灰调 */
@@ -471,6 +481,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
   }
 
   const text = MOTTO[variant] || MOTTO.fail
+  const motto = mottoColumns(text)
   const lightField = variant === 'pass' && phase === 'motto'
 
   return createPortal(
@@ -484,17 +495,22 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
       <canvas ref={inkRef} aria-hidden="true" />
 
       {phase === 'motto' && (
+        // 竖排两列：DOM 里第一句在前（＝书写顺序），CSS 用 row-reverse 把它摆到右边
         <div className={'qc-motto ' + (variant === 'pass' ? 'pass' : 'fail')}>
-          {mottoSequence(text).map(({ ch, delay, dur }, i) => (
-            <span
-              key={i}
-              className="qc-motto-ch"
-              data-ch={ch}
-              data-delay={delay.toFixed(2)}
-              style={{ animationDelay: `${delay.toFixed(2)}s`, animationDuration: `${dur.toFixed(2)}s` }}
-            >
-              {ch}
-            </span>
+          {motto.cols.map((col, ci) => (
+            <div className="qc-motto-col" key={ci}>
+              {col.map(({ ch, delay }, i) => (
+                <span
+                  key={i}
+                  className="qc-motto-ch"
+                  data-ch={ch}
+                  data-delay={delay.toFixed(2)}
+                  style={{ animationDelay: `${delay.toFixed(2)}s`, animationDuration: `${CH_DUR}s` }}
+                >
+                  {ch}
+                </span>
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -526,7 +542,13 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
       </button>
 
       {phase !== 'reward' && (phase === 'motto' || ((phase === 'gate' || phase === 'door') && held(phase))) && (
-        <div className="qc-hint">点 击 继 续</div>
+        // 题字相位：提示压到整句落齐 + 静默之后才冒出来（提前出现会诱导用户早点走，字就白落了）
+        <div
+          className="qc-hint"
+          style={phase === 'motto' ? { animationDelay: `${(motto.finish + HOLD_AFTER).toFixed(2)}s` } : undefined}
+        >
+          点 击 继 续
+        </div>
       )}
     </div>,
     document.body
