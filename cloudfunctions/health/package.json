@@ -1,0 +1,6 @@
+{
+  "name": "health",
+  "version": "1.0.0",
+  "private": true,
+  "description": "健康检查云函数：GET /api/health（第 3 周任务①，不连数据库）"
+}
