@@ -1343,6 +1343,7 @@ body {
   animation: qcFade 900ms ease-out both;
 }
 .qc-motto-ch {
+  position: relative;
   display: inline-block;
   will-change: transform, filter, opacity;
   animation-name: qcCharFlow, qcCharBreathe;
@@ -1358,15 +1359,28 @@ body {
   from { filter: blur(.4px); opacity: .8; }
   to { filter: blur(2.8px); opacity: 1; }
 }
+/* 字边缘的虚化云气：同字模糊影压在字后（跟着字的浮动一起动） */
+.qc-motto-ch::after {
+  content: attr(data-ch);
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  filter: blur(14px);
+  opacity: .45;
+  z-index: -1;
+  pointer-events: none;
+}
+
 /* 未达容错：淡墨云海上的白色题字（带墨晕辉光） */
 .qc-motto.fail .qc-motto-ch {
-  color: #f3f0e9;
-  text-shadow: 0 0 8px rgba(255, 255, 255, .3), 0 0 30px rgba(255, 255, 255, .38), 0 0 66px rgba(255, 255, 255, .18);
+  color: #f6f4ee;
+  text-shadow: 0 0 6px rgba(255, 255, 255, .5), 0 0 18px rgba(255, 255, 255, .42),
+    0 0 40px rgba(255, 255, 255, .3), 0 0 88px rgba(255, 255, 255, .16);
 }
 /* 达成：白云之上的砂金题字 */
 .qc-motto.pass .qc-motto-ch {
   color: #a9762c;
-  text-shadow: 0 0 16px rgba(190, 140, 60, .38), 0 0 46px rgba(190, 140, 60, .2);
+  text-shadow: 0 0 8px rgba(196, 146, 66, .5), 0 0 22px rgba(196, 146, 66, .38),
+    0 0 52px rgba(196, 146, 66, .22);
 }
 
 .qc-reward {

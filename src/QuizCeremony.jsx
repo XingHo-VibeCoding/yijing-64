@@ -18,11 +18,12 @@ import { createPortal } from 'react-dom'
  */
 
 const T_COVER = 900 // 云雾遮满
-const T_DISPERSE = 1100 // 云雾散开
+const T_DISPERSE_PASS = 1400 // 白云散开 → 露门庭
+const T_DISPERSE_FAIL = 2800 // 淡墨散开 → 露主页：延长 + 整体淡出 = 迷途知返的朦胧
 const GATE_CHURN = 1800 // 门前静置（「一秒后」运镜）
 const T_ENTER = 1900 // 进门运镜（穿过门洞）
-const T_EXIT_COVER = 520 // 收尾白云遮满
-const T_EXIT_FADE = 900
+const T_EXIT_COVER = 760 // 收尾白云遮满
+const T_EXIT_FADE = 2300 // 收尾散开（同样放慢，别硬切）
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v))
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
@@ -40,8 +41,9 @@ const C = {
   ink1: '52, 48, 43',
   ink2: '34, 31, 28',
   red: '150, 62, 48',
-  night1: '30, 27, 24', // 淡黑（近黑但非纯黑）
-  night2: '62, 57, 51', // 淡黑云里的亮调
+  night1: '80, 77, 72', // 墨气底：中灰而非纯黑（要仙境水墨，不要阴森）
+  night2: '176, 171, 162', // 云中亮雾（提仙气）
+  night3: '54, 51, 47', // 暗墨（拉浓淡层次，别让雾面发平）
 }
 
 /* 调试定格（与另两个转场的 ?transFreeze 同族，生产不带参数即自动推进） */
@@ -81,6 +83,7 @@ function makeMist(n) {
 }
 
 export default function QuizCeremony({ variant = 'fail', reward = null, onCovered, onHome }) {
+  const rootRef = useRef(null)
   const inkRef = useRef(null)
   const fgRef = useRef(null)
   const [phase, setPhase] = useState(QC_START || 'cover')
@@ -181,7 +184,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
         const r = p.r * S * (1 + 0.18 * Math.sin(t * 0.0012 * p.sp + p.ph))
         const a = p.al * k * (0.68 + 0.32 * Math.sin(t * 0.0014 * p.sp + p.ph))
         if (isWhite) soft(x, y, r, p.tone > 0.42 ? C.paper : C.mist1, Math.min(0.9, a))
-        else soft(x, y, r, p.tone > 0.5 ? C.night2 : C.night1, Math.min(0.9, a))
+        else soft(x, y, r, p.tone > 0.45 ? C.night2 : C.night3, Math.min(0.9, a))
       }
       // 流丝：横向掠过的细长雾带 —— 让「烟」真的在流
       for (let i = 0; i < 16; i++) {
@@ -353,9 +356,10 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
       const p = st.current.phase
       ctx.clearRect(0, 0, W, H)
       fctx.clearRect(0, 0, W, H)
+      let rootAlpha = 1 // 整层透明度：散开的后段淡出 → 露主界面不硬切
 
       if (p === 'cover' || p === 'motto') {
-        // 未达容错 = 淡墨云海；达成 = 白云翻涌
+        // 未达容错 = 水墨墨气（中灰，不阴森）；达成 = 白云翻涌
         ctx.fillStyle = isPass ? `rgb(${C.paper})` : `rgb(${C.night1})`
         ctx.fillRect(0, 0, W, H)
         drawCloudSea(t, 1, 0, isPass)
@@ -365,14 +369,18 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
         }
       } else if (p === 'disperse') {
         if (isPass) {
+          const q1 = clamp01(pt / T_DISPERSE_PASS)
           drawGate(t, 0)
-          drawCloudSea(t, 1 - easeInOut(clamp01(pt / T_DISPERSE)), easeOut(clamp01(pt / T_DISPERSE)) * H * 0.25, true)
-          if (pt >= T_DISPERSE) go('gate')
+          drawCloudSea(t, 1 - easeInOut(q1), easeOut(q1) * H * 0.25, true)
+          if (pt >= T_DISPERSE_PASS) go('gate')
         } else {
-          ctx.fillStyle = `rgb(${C.night1})`
+          // 未达容错：云气悠悠散开 —— 底墨渐薄、云团上飘、后段整层淡出（朦胧，不硬切）
+          const q1 = clamp01(pt / T_DISPERSE_FAIL)
+          ctx.fillStyle = `rgba(${C.night1}, ${1 - 0.62 * easeInOut(q1)})`
           ctx.fillRect(0, 0, W, H)
-          drawCloudSea(t, 1 - easeInOut(clamp01(pt / T_DISPERSE)), easeOut(clamp01(pt / T_DISPERSE)) * H * 0.3, false)
-          if (pt >= T_DISPERSE) {
+          drawCloudSea(t, (1 - easeInOut(clamp01((q1 - 0.12) / 0.88))) * 1.15, easeOut(q1) * H * 0.22, false)
+          rootAlpha = 1 - easeInOut(clamp01((q1 - 0.4) / 0.6))
+          if (pt >= T_DISPERSE_FAIL) {
             cb.current.onHome && cb.current.onHome()
             return
           }
@@ -388,12 +396,15 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
       } else if (p === 'reward') {
         drawGate(t, 1)
       } else if (p === 'exit') {
+        // 收尾：白云先遮满，再悠悠散开 + 整层淡出（同样不硬切）
         const coverK = easeOut(clamp01(pt / T_EXIT_COVER))
-        const fadeK = 1 - easeInOut(clamp01((pt - T_EXIT_COVER) / T_EXIT_FADE))
-        ctx.fillStyle = `rgb(${C.paper})`
+        const q1 = clamp01((pt - T_EXIT_COVER) / T_EXIT_FADE)
+        const paperA = coverK * (1 - 0.55 * easeInOut(q1))
+        ctx.fillStyle = `rgba(${C.paper}, ${paperA})`
         ctx.fillRect(0, 0, W, H)
         drawGate(t, 1)
-        drawCloudSea(t, Math.max(coverK, fadeK), 0, true)
+        drawCloudSea(t, Math.max(coverK, 1 - easeInOut(q1)), 0, true)
+        rootAlpha = 1 - easeInOut(clamp01((q1 - 0.35) / 0.65))
         if (pt >= T_EXIT_COVER + T_EXIT_FADE) {
           cb.current.onHome && cb.current.onHome()
           return
@@ -425,6 +436,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
         }
       }
 
+      if (rootRef.current) rootRef.current.style.opacity = String(clamp01(rootAlpha))
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
@@ -462,6 +474,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
 
   return createPortal(
     <div
+      ref={rootRef}
       className={'qc-root' + (lightField ? ' is-light' : '')}
       data-qc-phase={phase}
       onClick={handleClick}
@@ -475,6 +488,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
             <span
               key={i}
               className="qc-motto-ch"
+              data-ch={ch}
               style={{
                 animationDelay: `${(i * 0.42).toFixed(2)}s, ${(i * 0.63).toFixed(2)}s`,
                 animationDuration: `${(5.2 + (i % 3) * 0.9).toFixed(1)}s, ${(3.4 + (i % 4) * 0.5).toFixed(1)}s`,
