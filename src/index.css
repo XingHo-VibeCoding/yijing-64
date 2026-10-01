@@ -1416,3 +1416,25 @@ body {
 
 /* 浅底（白云）相位：提示转深墨才看得见 */
 .qc-root.is-light .qc-hint { color: rgba(40, 34, 26, .45); }
+/* 门庭 / 镀金卦象也是浅底（宣纸），同一处理 —— 米色底上的白字等于没有 */
+.qc-root[data-qc-phase='gate'] .qc-hint,
+.qc-root[data-qc-phase='door'] .qc-hint,
+.qc-root[data-qc-phase='reward'] .qc-hint { color: rgba(40, 34, 26, .5); }
+
+/* 静音开关（Day 12 · 「加音效」的配套）：仪式会自动出声，必须留一个出口。
+   按钮自带半透明墨底 —— 墨底与宣纸浅底上都能读，不必按相位切两套颜色。 */
+.qc-sound {
+  position: absolute; top: 20px; right: 20px; z-index: 3;
+  width: 40px; height: 40px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .22);
+  background: rgba(34, 31, 28, .55);
+  color: #f2eee3;
+  font-family: 'STXingkai', '华文行楷', 'STKaiti', 'KaiTi', '楷体', serif;
+  font-size: 18px; line-height: 1;
+  cursor: pointer;
+  transition: background .22s ease, color .22s ease, border-color .22s ease;
+}
+.qc-sound:hover { background: rgba(34, 31, 28, .78); border-color: rgba(255, 255, 255, .38); }
+.qc-sound.is-off { color: rgba(242, 238, 227, .42); border-color: rgba(255, 255, 255, .14); }

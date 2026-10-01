@@ -30,16 +30,24 @@
 ├─ db/
 │  └─ schema.sql         # 建表 + RLS（可执行，幂等）—— 云环境建好后执行，尚未在真库跑过
 └─ src/
+   ├─ assets/
+   │  └─ ceremony-landscape.jpg # 终局仪式的远景水墨山水（生成图，作 runtime 资源打包）
    ├─ main.jsx           # 应用入口
    ├─ App.jsx            # 总表页 + 单卦详情页 + 起卦逻辑 + 存档判定
    ├─ CastingAnimation.jsx # 起卦动画（太极 / 三圈爻 / 虚圆 / 水墨）
    ├─ CastResult.jsx     # 起卦结果页（三层解读 / 两个交互键 / 收藏 / 边界声明）
-   ├─ Records.jsx        # F8 过往起卦记录与收藏
-   ├─ Quiz.jsx           # F3 记忆测验页（看卦象选卦名 / 即时反馈 / 错题清单）
+   ├─ Records.jsx        # F8 过往起卦记录与收藏（含「换设备带走进度」的进度码）
+   ├─ Quiz.jsx           # F3 记忆测验页（出示卦名拼卦象 / 即时反馈 / 错题清单）
    ├─ quiz.js            # F3 出题逻辑（纯函数，不 import 数据 —— 可在 Node 里单独验证）
-   ├─ storage.js         # 本地存储层（接口按云端形状设计，将来只换实现）
+   ├─ QuizCeremony.jsx   # F3 终局仪式（云海题字 → 水墨门庭 → 进门 → 镀金卦象）
+   ├─ QuizInkBackground.jsx # 测验页水墨底（云气笔触 / 翻涌墨，确定性逐帧重绘）
+   ├─ QuizInkSweep.jsx   # 测验换题的墨云翻涌转场
+   ├─ inkBrush.js        # 水墨笔触工具（一笔墨 / 竖扫笔 / 门与山水层的离屏预渲染）
+   ├─ ceremonyAudio.js   # 仪式音效（Web Audio 程序化合成：古琴 / 清铃 / 风声，零音频资源）
+   ├─ storage.js         # 本地存储层（本地优先 + CloudBase PG 异步备份）
    ├─ mockApi.js         # 主视图的 mock 数据接口（加载/空/错误/成功四态；F6 时只换这层）
-   ├─ InkTransition.jsx  # 总表→详情的转场：涟漪 → 墨侵染 → 墨散 → 卦象浮现归位
+   ├─ InkTransition.jsx  # 总表→详情的转场：涟漪 → 墨侵染 → 墨散 → 竹简展开 → 卦象归位
+   ├─ MistTransition.jsx # 进测验的转场：云雾升腾 → 墨云翻涌遮屏 → 墨散露测验页
    ├─ HexagramFigure.jsx # 卦象图组件（六爻，从下往上渲染）
    ├─ SourceTag.jsx      # 来源标注（只有两类：《周易》原文 / 本项目的理解）
    ├─ index.css

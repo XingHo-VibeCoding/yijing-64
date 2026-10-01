@@ -1,21 +1,48 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { buildGateLayer, buildLandscapeLayer } from './inkBrush.js'
+import {
+  primeCeremonyAudio,
+  isMuted,
+  toggleMuted,
+  sfxMotto,
+  sfxDoor,
+  sfxReward,
+  sfxExit,
+  windOn,
+  windOff,
+} from './ceremonyAudio.js'
+import landscapeUrl from './assets/ceremony-landscape.jpg'
 
 /**
- * 测验终局仪式（Day 12 · 用户分镜；2026-10-01 美术返工）
+ * 测验终局仪式（Day 12 · 用户分镜；2026-10-01 美术返工；同日「门庭改水墨画 + 音效」）
  *
  * fail（未达容错）：淡墨云海遮屏、持续翻涌 → 白色毛笔行书「運隨時變，切勿焦躁」
  *                   → 点击 → 云散 → 回总表
  * pass（达成）    ：白云遮屏 → 砂金毛笔行书「靜神定心，自有所得」
- *                   → 点击 → 云散 → 2D 水墨门洞（无匾额、无门板）→ 秒余后**运镜进门**（穿过门洞）
- *                   → 雾中浮现镀金卦象 → 点击 → 白云遮屏 → 散开回总表
+ *                   → 点击 → 云散 → 水墨门庭 → 秒余后**运镜进门**（穿过门洞）
+ *                   → 云雾中的水墨楼阁推近 → 浮现镀金卦象 → 点击 → 白云遮屏 → 散开回总表
  *
  * 美术要求（用户指定）：飘渺神秘优先 —— 云雾第一目的是「雾」不是「黑」；
- * 黑云去纯黑改雾灰调；题字本身随烟雾流动；门庭 2D 水墨（平涂墨块 + 雾中楼阁 + 一点朱红）。
- * 题字用**繁体**：这是用户对仪式两句话的明确要求（项目其余界面文案仍为简体）。
+ * 黑云去纯黑改雾灰调；题字本身随烟雾流动；题字用**繁体**
+ * （这是用户对仪式两句话的明确要求，项目其余界面文案仍为简体，见 AGENTS.md R5）。
  *
- * 工程约定同族：portal 到 body、rAF 相位状态机、相位探针 data-qc-phase、?qcHold= 定格。
+ * 2026-10-01 二次返工（用户：**「门和楼阁做好看一些，不要简笔矢量图形拼接，要水墨画」**）
+ *   ① 远景楼阁：原 `pagoda()` 用矩形+三角形拼三层塔 → 换成生成的水墨山水画（`assets/ceremony-landscape.jpg`），
+ *      预渲染时做四边羽化，门前低透明度当「雾中楼阁」，进门后推近聚焦主楼。
+ *   ② 门：原 `brush()+fillRect()` 拼立柱/楣梁/檐 → 换成 `inkBrush.js` 的「一笔墨」重画
+ *      （弧长重采样 + 笔宽包络 + 边缘抖动 + 飞白 + 洇边），仍是两柱一梁一飞檐，
+ *      但每一处都是笔画，且全部**离屏预渲染一次**，主循环只做 drawImage + 变换。
+ *   ③ 音效（用户：**「还有加音效」**）：`ceremonyAudio.js` 程序化合成，零音频资源 ——
+ *      题字一声古琴（fail 低音 / pass 高音）、进门风起＋上行泛音、镀金卦象一记清铃、收尾钟声。
+ *      右上角有静音开关（不点击也出声的场景，必须留一个出口）。
+ *
+ * 工程约定同族：portal 到 body、rAF 相位状态机、相位探针 data-qc-phase、?qcHold= 定格、?qcStart= 直达相位。
  */
+
+/* 山水图：模块加载即开始拉取 —— 仪式前有整轮测验的时间，通常早就到位 */
+const landscapeImg = typeof window !== 'undefined' ? new Image() : null
+if (landscapeImg) landscapeImg.src = landscapeUrl
 
 const T_COVER = 900 // 云雾遮满
 const T_DISPERSE_PASS = 1400 // 白云散开 → 露门庭
@@ -87,6 +114,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
   const inkRef = useRef(null)
   const fgRef = useRef(null)
   const [phase, setPhase] = useState(QC_START || 'cover')
+  const [muteState, setMuteState] = useState(() => isMuted())
   const st = useRef({ phase: QC_START || 'cover', pt: 0, covered: !!QC_START, raf: 0 })
   const cb = useRef({})
   cb.current = { onCovered, onHome }
@@ -122,6 +150,9 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
     document.body.style.overflow = 'hidden'
 
     const isPass = variant === 'pass'
+    // 音效：环境风声整场都在（先做一个「远」），各相位的乐器声见下面的 phase effect
+    primeCeremonyAudio()
+    windOn(isPass ? 0.1 : 0.075, 3.2)
     const mist = makeMist(72)
     const start = performance.now()
     st.current.pt = start
@@ -156,21 +187,23 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
       soft(0, 0, rx, rgb, a)
       ctx.restore()
     }
-    /* 模糊墨块：2D 平涂 + 洇边（水墨质感的关键） */
-    const brush = (drawFn, blurPx, rgb, a) => {
-      if (a <= 0.008) return
-      ctx.save()
-      try {
-        ctx.filter = `blur(${(blurPx * S).toFixed(2)}px)`
-      } catch {
-        /* 不支持 filter 就退化为硬边 */
-      }
-      ctx.globalAlpha = a
-      ctx.fillStyle = `rgb(${rgb})`
-      ctx.beginPath()
-      drawFn()
-      ctx.fill()
-      ctx.restore()
+    /* 两张大图都是**离屏预渲染**的位图，逐帧只做 drawImage + 变换。
+       门是静态的，没必要每帧重算上千个墨点；山水图带羽化 alpha，也必须预烘。 */
+    let gateCv = null // 水墨门（1.6 倍分辨率烘一次，进门放大到 2.75 倍仍不糊）
+    let landCv = null // 水墨山水（已 cover 铺满 + 四边羽化）
+    let landKey = '' // 山水图的尺寸缓存键
+    const ensureGate = () => {
+      if (!gateCv) gateCv = buildGateLayer(W, H, S)
+      return gateCv
+    }
+    const ensureLand = () => {
+      const img = landscapeImg
+      if (!img || !img.complete || !img.naturalWidth) return null
+      const key = W + 'x' + H
+      if (landCv && landKey === key) return landCv
+      landCv = buildLandscapeLayer(img, W, H)
+      landKey = key
+      return landCv
     }
 
     /* ---------- 云海（cover / motto / exit）：持续旋涌 + 流丝 ---------- */
@@ -197,155 +230,91 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
       }
     }
 
-    /* ---------- 2D 水墨楼阁剪影（远景，雾中） ---------- */
-    const pagoda = (px, baseY, s, rgb, a) => {
-      if (a <= 0.02) return
-      for (let k = 0; k < 3; k++) {
-        const w = s * (1 - k * 0.2)
-        const y = baseY - s * (0.5 + k * 0.72)
-        // 檐（平直 2D 飞檐 + 上翘角）
-        brush(() => {
-          ctx.moveTo(px - w * 0.6, y)
-          ctx.lineTo(px + w * 0.6, y)
-          ctx.lineTo(px + w * 0.46, y - s * 0.3)
-          ctx.lineTo(px - w * 0.46, y - s * 0.3)
-          ctx.closePath()
-          ctx.fill()
-          ctx.moveTo(px - w * 0.6, y)
-          ctx.lineTo(px - w * 0.8, y - s * 0.17)
-          ctx.lineTo(px - w * 0.58, y - s * 0.05)
-          ctx.closePath()
-          ctx.fill()
-          ctx.moveTo(px + w * 0.6, y)
-          ctx.lineTo(px + w * 0.8, y - s * 0.17)
-          ctx.lineTo(px + w * 0.58, y - s * 0.05)
-          ctx.closePath()
-          ctx.fill()
-        }, 7, rgb, a)
-        // 层身
-        brush(() => ctx.fillRect(px - w * 0.28, y - s * 0.3 - s * 0.44, w * 0.56, s * 0.44), 6, rgb, a * 0.92)
-      }
-      // 刹顶
-      brush(() => ctx.fillRect(px - s * 0.022, baseY - s * 2.86, s * 0.044, s * 0.42), 4, rgb, a * 0.9)
-    }
+    /* ---------- 门庭场景：水墨山水为远景，水墨门为前景。enterK: 0 站在门前 → 1 已进门 ---------- */
+    const drawScene = (t, enterK) => {
+      const ek = clamp01(enterK)
+      const cam = easeInOut(ek)
+      const k = 1 + 1.75 * cam // 运镜推近
+      const near = 1 - clamp01((ek - 0.32) / 0.68) // 穿过门后：门框完全淡出
 
-    /* ---------- 2D 水墨门洞（无匾额 / 无门板），enterK: 0 站在门前 → 1 已进门 ---------- */
-    const drawGate = (t, enterK) => {
-      const k = 1 + 1.75 * easeInOut(clamp01(enterK)) // 运镜推近
-      const near = 1 - clamp01((enterK - 0.32) / 0.68) // 穿过门后：门框完全淡出
-
-      // 底：雾白宣纸 + 上下墨晕
+      // 底：雾白宣纸
       ctx.fillStyle = `rgb(${C.paper})`
       ctx.fillRect(0, 0, W, H)
-      soft(W * 0.5, H * 0.14, W * 0.8, C.mist1, 0.5)
-      soft(W * 0.5, H * 0.95, W * 0.85, C.mist2, 0.3)
 
       const cx = W / 2
       const cy = H * 0.58
       const doorW = Math.min(W * 0.3, 380 * S)
       const doorH = Math.min(H * 0.46, 470 * S)
-      const oyTop = cy - doorH * 0.3
-      const oyBot = cy + doorH * 0.64
-      const anchorY = (oyTop + oyBot) / 2
+      const anchorY = cy + doorH * 0.17 // = (oyTop + oyBot) / 2，运镜绕它缩放
 
-      // 远景：雾带 + 雾中楼阁群（进门时先行淡出 —— 它们都在门外）
-      const far = 1 - clamp01(enterK * 1.5)
-      if (far > 0.02) {
-        for (let i = 0; i < 7; i++) {
-          const y = H * (0.18 + i * 0.11) + Math.sin(t * 0.0004 + i) * 12 * S
-          softEll(W * (0.5 + 0.36 * Math.sin(i * 2.1 + t * 0.0002)), y, W * 0.66, H * 0.05, C.mist1, 0.55 * far)
-        }
-        pagoda(W * 0.12, H * 0.73, 134 * S, C.mist3, 0.5 * far)
-        pagoda(W * 0.87, H * 0.71, 152 * S, C.mist3, 0.46 * far)
-        pagoda(W * 0.27, H * 0.6, 88 * S, C.mist2, 0.44 * far)
-        pagoda(W * 0.73, H * 0.56, 76 * S, C.mist2, 0.4 * far)
-        pagoda(W * 0.44, H * 0.45, 56 * S, C.mist1, 0.52 * far)
-        pagoda(W * 0.62, H * 0.7, 104 * S, C.mist3, 0.32 * far)
+      /* ---- 远景：水墨山水画。门前是雾中若隐的楼阁，进门时推近聚焦主楼 ----
+         用 **multiply** 而不是普通叠加：画的白底乘上去等于没乘（不压暗页面），
+         只有墨色压深 —— 于是它真的「画在宣纸上」，而不是贴了一张比纸暗的方块。
+         normal 模式下那片米白底会把整屏压灰，这也是上一版山水看不见的原因之一。 */
+      const land = ensureLand()
+      if (land) {
+        // 焦点从画面正中平移到主楼所在的（0.53, 0.24）—— 起止都平滑，不会有跳变
+        const sx = 0.5 + 0.03 * cam
+        const sy = 0.5 - 0.26 * cam
+        const Z = 1 + 0.85 * cam
+        const dw = W * Z
+        const dh = H * Z
+        const tx = W / 2
+        const ty = H * (0.5 - 0.06 * cam)
+        ctx.save()
+        ctx.globalCompositeOperation = 'multiply'
+        ctx.globalAlpha = 0.68 + 0.32 * cam // 门前淡（在雾里）→ 进门后满
+        ctx.drawImage(land, tx - sx * dw, ty - sy * dh, dw, dh)
+        ctx.restore()
       }
 
-      ctx.save()
-      ctx.translate(cx, anchorY)
-      ctx.scale(k, k)
-      ctx.translate(-cx, -anchorY)
+      // 上下压角墨晕：把视线收进画面中间（薄薄一层就够，厚了会把山水洗白）
+      soft(W * 0.5, H * 0.06, W * 0.82, C.mist1, 0.26)
+      soft(W * 0.5, H * 0.99, W * 0.86, C.mist2, 0.2)
 
-      // 门洞里的雾光 + 门后更远的楼阁（透过门洞看见的那一层）
-      softEll(cx, anchorY, doorW * (0.7 + 0.75 * enterK), doorH * (0.6 + 0.5 * enterK), C.paper, 0.92)
-      softEll(cx, anchorY, doorW * 1.65, doorH * 1.15, C.mist1, 0.32)
-      if (far > 0.02) {
-        pagoda(cx - doorW * 0.22, oyBot + doorH * 0.03, 72 * S, C.mist2, 0.5 * far)
-        pagoda(cx + doorW * 0.28, oyBot - doorH * 0.01, 56 * S, C.mist2, 0.42 * far)
+      /* ---- 中景雾带：横着掠过山水 → 楼阁是「在雾里」，不是贴上去的一张画 ----
+         刻意避开楼阁所在的上三分之一，只在云海那一段铺，否则等于把画糊掉 */
+      const mistK = 1 - 0.32 * cam
+      for (let i = 0; i < 6; i++) {
+        const y = H * (0.32 + i * 0.13) + Math.sin(t * 0.0004 + i * 1.3) * 14 * S
+        const x = W * (0.5 + 0.4 * Math.sin(i * 2.1 + t * 0.00023))
+        softEll(x, y, W * (0.5 + 0.22 * ((i * 7) % 3)), H * (0.03 + (i % 3) * 0.013), C.mist1, 0.32 * mistK)
       }
+      // 楼阁那一带只留一丝薄雾（要「若隐」不要「隐没」）
+      softEll(W * 0.52, H * 0.21, W * 0.48, H * 0.07, C.mist1, 0.22 * mistK)
 
-      const pw = doorW * 0.22
-      const pilTop = oyTop - doorH * 0.08
-      const pilH = oyBot - pilTop + doorH * 0.16
-      // 左右立柱（墨柱 + 亮心 + 颗粒，破掉平涂感）
-      for (const side of [-1, 1]) {
-        const px = side < 0 ? cx - doorW / 2 - pw : cx + doorW / 2
-        brush(() => ctx.fillRect(px, pilTop, pw, pilH), 11, C.ink1, 0.86 * near)
-        brush(() => ctx.fillRect(px + pw * 0.3, pilTop + pilH * 0.03, pw * 0.34, pilH * 0.94), 9, C.inkSoft, 0.5 * near)
-        // 柱脚墨积
-        brush(() => ctx.fillRect(px - pw * 0.06, oyBot - doorH * 0.02, pw * 1.12, doorH * 0.12), 13, C.ink2, 0.7 * near)
+      /* ---- 门：预渲染位图 + 运镜（绕 anchorY 放大，穿过去时淡出）---- */
+      if (near > 0.012) {
+        const g = ensureGate()
+        ctx.save()
+        ctx.globalAlpha = near
+        ctx.translate(cx, anchorY)
+        ctx.scale(k, k)
+        ctx.translate(-cx, -anchorY)
+        // 门洞里的雾光：门内是「虚」的，门才立得住
+        softEll(cx, anchorY + doorH * 0.1, doorW * (0.78 + 0.7 * ek), doorH * (0.62 + 0.45 * ek), C.paper, 0.9)
+        ctx.drawImage(g, 0, 0, W, H)
+        ctx.restore()
       }
-      // 台基
-      brush(() => ctx.fillRect(cx - doorW * 1.02, oyBot + doorH * 0.08, doorW * 2.04, doorH * 0.12), 13, C.ink1, 0.42 * near)
-      // 楣梁
-      brush(() => ctx.fillRect(cx - doorW / 2 - pw * 1.32, oyTop - doorH * 0.2, doorW + pw * 2.64, doorH * 0.12), 10, C.ink1, 0.88 * near)
-      brush(() => ctx.fillRect(cx - doorW / 2, oyTop - doorH * 0.145, doorW, doorH * 0.03), 7, C.inkSoft, 0.34 * near)
-      // 檐（平直飞檐 + 上翘角）
-      brush(() => {
-        ctx.moveTo(cx - doorW * 0.98, oyTop - doorH * 0.19)
-        ctx.lineTo(cx + doorW * 0.98, oyTop - doorH * 0.19)
-        ctx.lineTo(cx + doorW * 0.74, oyTop - doorH * 0.35)
-        ctx.lineTo(cx - doorW * 0.74, oyTop - doorH * 0.35)
-        ctx.closePath()
-        ctx.fill()
-        ctx.moveTo(cx - doorW * 0.98, oyTop - doorH * 0.19)
-        ctx.lineTo(cx - doorW * 1.16, oyTop - doorH * 0.34)
-        ctx.lineTo(cx - doorW * 0.93, oyTop - doorH * 0.24)
-        ctx.closePath()
-        ctx.fill()
-        ctx.moveTo(cx + doorW * 0.98, oyTop - doorH * 0.19)
-        ctx.lineTo(cx + doorW * 1.16, oyTop - doorH * 0.34)
-        ctx.lineTo(cx + doorW * 0.93, oyTop - doorH * 0.24)
-        ctx.closePath()
-        ctx.fill()
-      }, 8, C.ink1, 0.86 * near)
-      // 檐上留白（墨的浓淡层次）
-      brush(() => ctx.fillRect(cx - doorW * 0.62, oyTop - doorH * 0.34, doorW * 1.24, doorH * 0.05), 9, C.inkSoft, 0.3 * near)
-      // 一点朱红（画风参考里的那点红）
-      brush(() => ctx.fillRect(cx - doorW / 2, oyTop, doorW, doorH * 0.024), 2.5, C.red, 0.4 * near)
-      ctx.restore()
 
       // 门前后的飘雾（白 + 淡墨），让画面「飘渺」
       for (let i = 0; i < 24; i++) {
         const ph = i * 2.3
         const drift = t * (0.032 + (i % 4) * 0.013)
-        const x = (((drift + i * 271) % (W + 900)) - 450)
+        const x = ((drift + i * 271) % (W + 900)) - 450
         const y = H * (0.32 + 0.6 * ((i % 7) / 7)) + Math.sin(t * 0.0007 + ph) * 36 * S
         const white = i % 3 !== 0
-        const a = (white ? 0.32 : 0.18) * (0.68 + 0.32 * Math.sin(t * 0.001 + ph))
+        const a = (white ? 0.24 : 0.13) * (0.68 + 0.32 * Math.sin(t * 0.001 + ph)) * (1 - 0.22 * cam)
         softEll(x, y, (170 + (i % 5) * 92) * S, (32 + (i % 4) * 15) * S, white ? C.paper : C.mist3, Math.max(0, a))
       }
 
-      // 穿过门洞之后：白雾只做过渡（峰值后回落），门后的雾中楼阁渐显 —— 不要一片死白
-      if (enterK > 0.42) {
-        const inside = clamp01((enterK - 0.42) / 0.58)
-        const wash = 0.74 * (1 - easeInOut(inside))
+      /* ---- 穿门那一瞬：白雾起、过半后退去（不落成一片死白），露出门后的山水 ---- */
+      if (ek > 0.34) {
+        const q = clamp01((ek - 0.34) / 0.66)
+        const wash = 0.7 * Math.sin(Math.PI * Math.pow(q, 0.7))
         if (wash > 0.01) {
           ctx.fillStyle = `rgba(${C.paper}, ${wash})`
           ctx.fillRect(0, 0, W, H)
-        }
-        // 门后世界：雾带 + 雾中楼阁（随进门进度浮现）
-        if (inside > 0.05) {
-          for (let i = 0; i < 6; i++) {
-            softEll(W * (0.16 + i * 0.14), H * (0.46 + 0.09 * i) + Math.sin(t * 0.0005 + i) * 14 * S,
-              W * 0.32, H * 0.042, C.mist1, 0.42 * inside)
-          }
-          pagoda(W * 0.19, H * 0.77, 112 * S, C.mist3, 0.58 * inside)
-          pagoda(W * 0.81, H * 0.74, 136 * S, C.mist3, 0.5 * inside)
-          pagoda(W * 0.5, H * 0.62, 78 * S, C.mist2, 0.55 * inside)
-          pagoda(W * 0.35, H * 0.69, 62 * S, C.mist2, 0.42 * inside)
         }
       }
     }
@@ -370,7 +339,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
       } else if (p === 'disperse') {
         if (isPass) {
           const q1 = clamp01(pt / T_DISPERSE_PASS)
-          drawGate(t, 0)
+          drawScene(t, 0)
           drawCloudSea(t, 1 - easeInOut(q1), easeOut(q1) * H * 0.25, true)
           if (pt >= T_DISPERSE_PASS) go('gate')
         } else {
@@ -386,15 +355,15 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
           }
         }
       } else if (p === 'gate') {
-        drawGate(t, 0)
+        drawScene(t, 0)
         if (pt >= GATE_CHURN && !held('gate')) go('door')
       } else if (p === 'door') {
         // 进门：运镜穿过门洞（不是开门 —— 本就没有门板）
         const k = easeInOut(clamp01(pt / T_ENTER))
-        drawGate(t, k)
+        drawScene(t, k)
         if (pt >= T_ENTER && !held('door')) go('reward')
       } else if (p === 'reward') {
-        drawGate(t, 1)
+        drawScene(t, 1)
       } else if (p === 'exit') {
         // 收尾：白云先遮满，再悠悠散开 + 整层淡出（同样不硬切）
         const coverK = easeOut(clamp01(pt / T_EXIT_COVER))
@@ -402,7 +371,7 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
         const paperA = coverK * (1 - 0.55 * easeInOut(q1))
         ctx.fillStyle = `rgba(${C.paper}, ${paperA})`
         ctx.fillRect(0, 0, W, H)
-        drawGate(t, 1)
+        drawScene(t, 1)
         drawCloudSea(t, Math.max(coverK, 1 - easeInOut(q1)), 0, true)
         rootAlpha = 1 - easeInOut(clamp01((q1 - 0.35) / 0.65))
         if (pt >= T_EXIT_COVER + T_EXIT_FADE) {
@@ -445,8 +414,21 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', fit)
       document.body.style.overflow = prevOverflow
+      windOff(0.7) // 离场务必收风，否则噪声会一直跟着页面
     }
   }, [])
+
+  /* 声音事件：按相位各触发一次。挂在 effect 而不是点击回调里 ——
+     ?qcStart=gate 这类调试直达也能出声，且相位回退/重渲染不会重复触发。 */
+  const sounded = useRef({})
+  useEffect(() => {
+    if (sounded.current[phase]) return
+    sounded.current[phase] = true
+    if (phase === 'motto') sfxMotto(variant === 'pass')
+    else if (phase === 'door') sfxDoor()
+    else if (phase === 'reward') sfxReward()
+    else if (phase === 'exit') sfxExit()
+  }, [phase, variant])
 
   /* 点击推进：motto（云散）与 reward（白云收尾）；调试定格时 gate/door 也可点击推进 */
   const handleClick = () => {
@@ -511,6 +493,20 @@ export default function QuizCeremony({ variant = 'fail', reward = null, onCovere
 
       {/* 前景薄雾层：压在题字之上 → 字像是烟的一部分 */}
       <canvas ref={fgRef} className="qc-fg" aria-hidden="true" />
+
+      {/* 静音开关：仪式是会出声的，必须给用户留一个出口（点击不推进相位） */}
+      <button
+        className={'qc-sound' + (muteState ? ' is-off' : '')}
+        type="button"
+        title={muteState ? '开启音效' : '静音'}
+        aria-label={muteState ? '开启音效' : '静音'}
+        onClick={(e) => {
+          e.stopPropagation()
+          setMuteState(toggleMuted())
+        }}
+      >
+        {muteState ? '静' : '音'}
+      </button>
 
       {phase !== 'reward' && (phase === 'motto' || ((phase === 'gate' || phase === 'door') && held(phase))) && (
         <div className="qc-hint">点 击 继 续</div>
