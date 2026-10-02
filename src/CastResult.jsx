@@ -88,7 +88,7 @@ export default function CastResult({
           {archived ? (
             <>今天的卦<b>已记录</b> —— 日后可以在「我的记录」里回看这一天起的正是这一卦。</>
           ) : (
-            <>今天的第一卦已经记过了，<b>本卦仅作娱乐，不入记录</b>。</>
+            <>今天的第一卦已经记过了，<b>人生路远，莫向歧路</b>。</>
           )}
         </p>
 
@@ -205,7 +205,8 @@ export default function CastResult({
         <footer className="cr-boundary">
           <p className="cr-boundary-main">成事在人，莫问前程</p>
           <p className="cr-boundary-sub">
-            本页不预测、不建议，请把它当作一段古文的解读。
+            运随时变，莫问前程
+            <br />
             卦不替你做决定——它只是让你多一个看当下的角度。
           </p>
         </footer>

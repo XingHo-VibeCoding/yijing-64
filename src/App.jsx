@@ -550,7 +550,7 @@ export default function App() {
           )}
         </button>
 
-        <p className="boundary">本页不提供占卜、预测与运势判断</p>
+        <p className="boundary">运随时变，莫问前程</p>
       </header>
 
       {/* 收藏失败提示：页首红棕提示条，4 秒自动消失（role=alert 朗读） */}
