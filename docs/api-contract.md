@@ -57,6 +57,12 @@
 
 ## 三、数据模型（第 3 周要建的表）
 
+> **可执行脚本**（本节是它们的逐字来源，两边必须一致）：
+> `db/schema.full.sql`（建表 + 约束 + 行级权限 + 授权，**幂等**）｜ `db/seed.sql`（示例数据，**幂等**）
+> 两个脚本都**不含 `drop table`、不删任何已有数据**，可反复执行；执行步骤见 §三.6。
+
+### 三.1 表总览
+
 | 表 | 主键 | 关键列 | 说明 |
 | --- | --- | --- | --- |
 | `divination_records` | `(uid, date)` | `hexagram_id smallint`、`changing_lines smallint[]` | 每日第一卦存档。**主键强制「一天一条」**，不靠应用层查重 |
@@ -67,6 +73,112 @@
 
 > 以上 5 张表在 Day 12 已经建好（`db/migrations/`），**第 3 周沿用，不重建**。
 > 卦象主数据（64 卦 + 384 爻辞）是**只读素材**，来自仓库 `data/*.json`，**不入库**。
+
+### 三.2 字段级结构
+
+以下与线上库逐列核对过（Day 14 只读实测，23 列全部一致）。
+
+#### `divination_records` — 起卦记录（接口 2.1 / 2.2）
+
+| 列 | 类型 | 约束 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `uid` | `text` | NOT NULL，主键之一 | 无 | 匿名登录标识，仅用于行级隔离 |
+| `date` | `date` | NOT NULL，主键之一 | 无 | 业务日期，一天一条；服务端按 Asia/Shanghai 取 |
+| `hexagram_id` | `smallint` | NOT NULL，CHECK 取值 1–64 | 无 | 卦序号 |
+| `changing_lines` | `smallint[]` | NOT NULL，CHECK 元素属于 1–6 | `'{}'` | 变爻位置，可为空数组 |
+| `created_at` | `timestamptz` | NOT NULL | `now()` | 写库时间，**不是**用户行为时刻 |
+
+> 变爻的 CHECK 用数组包含判断（`changing_lines <@ '{1,2,3,4,5,6}'`），空数组同样满足 ——
+> 正合「可以没有变爻」。这条把接口 2.2 的 422 规则下沉到了数据库层，服务端仍要自己校验。
+
+#### `favorites` — 收藏（接口 3.1 / 3.2 / 3.3）
+
+| 列 | 类型 | 约束 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `uid` | `text` | NOT NULL，主键之一 | 无 | 同 `divination_records.uid` |
+| `hexagram_id` | `smallint` | NOT NULL，主键之一，CHECK 取值 1–64 | 无 | 收藏的卦序号 |
+| `created_at` | `timestamptz` | NOT NULL | `now()` | 接口只返回它的**日期部分**，与「不存精确时刻」同口径 |
+
+#### `study_progress` — 学习进度（接口 4.3 / 4.4）
+
+| 列 | 类型 | 约束 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `uid` | `text` | NOT NULL，主键 | 无 | 一人一行 |
+| `answered_total` | `integer` | NOT NULL，CHECK 非负 | `0` | 累计作答数 |
+| `correct_total` | `integer` | NOT NULL，CHECK 非负且不超过作答数 | `0` | 累计正确数 |
+| `wrong_ids` | `smallint[]` | NOT NULL | `'{}'` | 错题本（卦序号） |
+| `created_at` | `timestamptz` | NOT NULL | `now()` | 首次写入时间 |
+| `updated_at` | `timestamptz` | NOT NULL | `now()` | 最近写入时间，接口返回其日期部分 |
+
+> `correct_total <= answered_total` 这条 CHECK 把接口 4.4 的 422 规则下沉到了数据库层。
+
+#### `study_rounds` — 每轮成绩流水（接口 4.1 / 4.2）
+
+| 列 | 类型 | 约束 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `id` | `bigserial` | NOT NULL，主键 | 序列分配 | 流水号；接口返回它给客户端做去重 |
+| `uid` | `text` | NOT NULL | 无 | 同 `divination_records.uid` |
+| `score` | `smallint` | NOT NULL，CHECK 非负且不超过题数 | 无 | 本轮答对数 |
+| `total` | `smallint` | NOT NULL，CHECK 为正 | `8` | 一轮题数（Day 11 由 20 定为 8） |
+| `created_at` | `timestamptz` | NOT NULL | `now()` | 交卷时间，倒序取即为成绩曲线 |
+
+#### `gilded` — 镀金成就（接口 5.1 / 5.2）
+
+| 列 | 类型 | 约束 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `uid` | `text` | NOT NULL，主键 | 无 | 一人一行 |
+| `hexagram_ids` | `smallint[]` | NOT NULL，CHECK 元素属于 1–64 | `'{}'` | 已镀金的卦序号，写接口取并集 |
+| `created_at` | `timestamptz` | NOT NULL | `now()` | 首次写入时间 |
+| `updated_at` | `timestamptz` | NOT NULL | `now()` | 最近一次并集写入时间 |
+
+### 三.3 为什么本库没有外键
+
+五张表之间**没有任何外键**，这不是遗漏，是结构决定的：
+
+| 可能的外键 | 为什么不建 |
+| --- | --- |
+| `*.uid` → 用户表 | **库里没有用户表**。uid 来自平台匿名登录，服务端只把它当隔离键用 |
+| `hexagram_id` → 卦象表 | 卦象主数据**不入库**（见本节开头），留在仓库 `data/*.json` 由前端加载 |
+| `study_rounds.id` → 其它表 | 没有表引用流水号 |
+
+替代手段：`hexagram_id` 与 `hexagram_ids` 的取值边界由 **CHECK 约束**保证（见三.2），
+效果等价于「外键 + 参照表」中最要紧的那一半，且不必把只读素材复制进数据库。
+
+> 若课程明确要求必须出现外键，`db/schema.full.sql` 的**附录 B** 给了一份可选方案
+> （加一张只存 64 个序号的 `hexagrams` 参照表，再挂两条外键）。**默认不启用** ——
+> 启用就等于库里多了一张表，需要先改本节，否则契约与数据库就不一致了。
+
+### 三.4 行级权限一览
+
+每张表的策略**故意不对称**，「缺哪一条」是设计的一部分：
+
+| 表 | SELECT | INSERT | UPDATE | DELETE |
+| --- | --- | --- | --- | --- |
+| `divination_records` | 有 | 有 | **无**（记录不可事后编辑） | 有 |
+| `favorites` | 有 | 有 | 无 | 有 |
+| `study_progress` | 有 | 有 | 有（进度要累加） | 无 |
+| `study_rounds` | 有 | 有 | 无 | 无（流水只增） |
+| `gilded` | 有 | 有 | 有（并集写回） | **无**（成就不参与清空） |
+
+所有策略的条件都是 `uid = current_uid()`，共 14 条。
+
+### 三.5 索引
+
+| 索引 | 表 | 用途 |
+| --- | --- | --- |
+| `idx_records_uid_date` | `divination_records` | 记录列表按 `date` 倒序（接口 2.1） |
+| `idx_rounds_uid_time` | `study_rounds` | 成绩流水按时间倒序（接口 4.1） |
+
+### 三.6 建表与灌数的执行步骤
+
+1. CloudBase 控制台 → 数据库 → PostgreSQL → SQL 编辑器
+2. 整份粘贴执行 `db/schema.full.sql`（全是 DDL，几秒完成；末尾会自动打印四条自检结果）
+3. 核对自检输出：表 5 张且 RLS 全为 true、约束 5 主键 + 5 检查、策略 14 条、违规扫描 5 项全 0
+4. 可选：粘贴执行 `db/seed.sql` 灌 15 行示例数据（只写两个示例 uid，不碰真实用户）
+5. 想清掉示例数据：`db/seed.sql` 末尾有一段**注释掉的**清理语句，取消注释执行即可
+
+> ⚠️ `db/schema.full.sql` 会**新增 4 条 CHECK 约束**，这是相对 Day 12 线上结构的唯一变化。
+> 执行前它末尾的「违规扫描」应为 0 行 —— Day 14 已在真库实测为 0，可以安全添加。
 
 ---
 
@@ -392,3 +504,4 @@
 | 版本 | 日期 | 内容 |
 | --- | --- | --- |
 | v1 | 2026-10-02 | 首版：登记全部接口占位（第 3 周依据）。共 16 个接口，`GET /api/health` 已实现并验证，其余 15 个待实现 |
+| v1.1 | 2026-10-02 | 第三节由「5 行概览」升级为**字段级数据模型**（列 / 类型 / 约束 / 默认值 / 说明），并补：无外键的理由、行级权限一览、索引、建表执行步骤。配套脚本 `db/schema.full.sql` 与 `db/seed.sql`（二者幂等、不含 drop table）。核对方式：只读查询线上库的 `information_schema` / `pg_constraint` / `pg_policies` / `pg_class`，23 列、14 条策略逐项比对一致 |
