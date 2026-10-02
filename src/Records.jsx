@@ -77,6 +77,9 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
       {/* ── 起卦记录 ── */}
       {tab === 'records' && (
         <section className="rec-list">
+          {/* 规则说明（Day 13）：结果页的存档提示已改成箴言，这条功能说明改在此处常驻。
+              空态那句提示自带同一规则，所以只在有记录时显示，避免同一屏说两遍。 */}
+          {records.length > 0 && <p className="rec-note">只收录每日第一次起卦</p>}
           {records.length === 0 ? (
             <p className="rec-empty">
               还没有记录。<b>每天第一次起卦会自动记在这里</b>，一天只记一条——

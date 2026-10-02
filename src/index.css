@@ -293,6 +293,9 @@ body {
 .rec-head { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
 .rec-title { margin: 0; font-size: 24px; font-weight: 600; }
 .rec-sub { margin: 8px 0 0; font-size: 13.5px; line-height: 1.85; color: var(--ink-soft); }
+/* 分区规则说明（Day 13）：结果页的存档提示改成箴言后，F8 的规则说明改在「起卦记录」分区常驻。
+   用 --ink-soft #5f4d3e 对宣纸 #e9d9b4 实测 5.75:1，小字达标（≥4.5）。 */
+.rec-note { margin: 0 0 12px; font-size: 12.5px; line-height: 1.8; color: var(--ink-soft); }
 
 .rec-tabs { display: flex; gap: 8px; margin-top: 20px; }
 .rec-tab {
