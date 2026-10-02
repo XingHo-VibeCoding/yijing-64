@@ -26,8 +26,8 @@
 --   表        5 张全部存在，主键与列名逐一对齐（23 列）
 --   RLS       5 张全部开启
 --   策略      14 条，与本文件 §5 完全一致
---   约束      线上现有：5 条主键 + 2 条 hexagram_id 范围 CHECK
---             本文件**新增 4 条**（见 §3 的说明），加之前已实测现有数据 0 违规
+--   约束      5 条主键 + 6 条 CHECK（含本文件新增的 4 条，见 §3）
+--             ✅ 4 条新增的约束已于 2026-10-02 落库（迁移 20261002234609），加之前实测现有数据 0 违规
 --   外键      0 条 —— 不是遗漏，理由见 §3 末尾
 --   授权      anon / authenticated 已可读写（见 §6）
 --
@@ -40,9 +40,10 @@
 --   4. 可选：接着执行 db/seed.sql 灌示例数据
 --      （它只写两个示例 uid 的行，不会碰到任何真实用户的数据）
 --
--- ⚠️ 本文件会**新增 4 条 CHECK 约束**。这是相对线上库唯一的结构变化。
---    若你的库里已有违反这些约束的脏数据，第 3 节会报错并**整节回滚**——
---    先跑 §7 的「④ 数据违规扫描」确认返回 0 行，再执行。
+-- ✅ 本文件相对 Day 12 线上库的唯一结构变化（新增 4 条 CHECK 约束 + 1 条索引 + 1 条列注释）
+--    **已于 2026-10-02 落库**（迁移 `20261002234609_add_check_constraints_and_index`）——
+--    库已是这个状态时再跑本文件是**空操作**（全部 if not exists / drop if exists）。
+--    若要在别的库上执行，先跑 §7 的「④ 数据违规扫描」确认返回 0 行（有脏数据时第 3 节会整节回滚）。
 -- ============================================================================
 
 
@@ -167,7 +168,7 @@ create index if not exists idx_rounds_uid_time
 -- 这里用「先删后加」而不是直接 add：表可能已存在（线上就是这样），
 -- 直接 add 会报 duplicate_object，脚本就不再可重复执行了。
 --
--- ⚠️ 下面 4 条是**相对线上库新增**的（线上原本只有 hexagram_id 的范围 CHECK）。
+-- 下面 4 条由迁移 `20261002234609` 于 2026-10-02 加入，现已生效（线上原本只有 hexagram_id 的范围 CHECK）。
 --    它们把契约里的校验规则下沉到数据库层：
 --      · 变爻只能是 1–6            ← 契约 2.2 的 422 规则
 --      · 镀金数组只能是 1–64       ← 契约 5.2 的 422 规则
@@ -336,7 +337,7 @@ select tablename, rowsecurity as rls_enabled
    and tablename in ('divination_records','favorites','study_progress','study_rounds','gilded')
  order by tablename;
 
--- ② 约束清单（应 5 条 p 主键 + 5 条 c 检查，其中 changing_lines / totals / score / gilded 是本次新增）
+-- ② 约束清单（应 5 条 p 主键 + 6 条 c 检查，其中 changing_lines / totals / score / gilded 由本次迁移新加）
 select conrelid::regclass::text as tbl, conname, contype, pg_get_constraintdef(oid) as definition
   from pg_constraint
  where connamespace = 'public'::regnamespace
