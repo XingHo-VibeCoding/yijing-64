@@ -74,10 +74,18 @@
 | **B · 示例数据**（无会话时） | `?uid=demo-yijing64-user-a` | 函数环境变量里的 `PUBLISHABLE_KEY`（`role=anon`、`sub='anon'`） | **仅 `demo-yijing64-user-%` 前缀的行** |
 
 **通道 B 的安全边界是数据库兜的，不是只靠函数判断**：
-RLS 策略 `read demo records` / `read demo favorites`（迁移 `20261004221126`）只放行
-`uid like 'demo-yijing64-user-%'`，而真实 uid 由匿名登录生成、是 UUID 形状，永远匹配不上该前缀。
-已实测：Publishable Key 身份读到 9 条 demo 记录，且**真实数据泄漏条数 = 0**。
-另外函数层也再挡一道 —— `?uid=` 传非 demo 前缀一律 `403 FORBIDDEN`（对应契约「客户端不得传 uid」）。
+RLS 策略 `read demo records` / `read demo favorites` 只放行
+`uid like 'demo-yijing64-user-%'` **且** `auth.uid() is null or auth.uid() = 'anon'`
+（迁移 `20261004221126` 建立，`20261004230153` 收紧）。
+第二个条件是关键：Publishable Key 的 `sub` 恒为 `'anon'`，而真实会话的 `sub` 是 UUID ——
+**所以已登录用户即使匹配了前缀也读不到 demo 行**。
+函数层也再挡一道 —— `?uid=` 传非 demo 前缀一律 `403 FORBIDDEN`（对应契约「客户端不得传 uid」）。
+
+> ⚠️ **为什么必须有第二个条件**：`20261004221126` 最初只写了 `to anon, authenticated` + 前缀匹配，
+> 结果**任何已登录用户都匹配上了这条策略** —— 实测一个库里 0 行的真实匿名用户，
+> 通过通道 A 读到了全部 9 条 demo 记录。收紧后复测：该用户 `visible=0 / demo_leaked=0`，
+> 而 demo 通道仍返回 5 条记录 / 3 条收藏（**没有修过头**）。
+> 教训：**`to authenticated` 不等于「只给服务用」—— 加上它就等于对所有登录用户开放。**
 
 > ⚠️ `PUBLISHABLE_KEY` 是**设计上就公开**的凭证（`role=anon`，只能读 RLS 放行的行），
 > 本项目前端本来就在用它；它只作为云函数环境变量注入，**不写进代码、不进仓库**。
@@ -534,6 +542,7 @@ RLS 策略 `read demo records` / `read demo favorites`（迁移 `20261004221126`
 | 版本 | 日期 | 内容 |
 | --- | --- | --- |
 | v1 | 2026-10-02 | 首版：登记全部接口占位（第 3 周依据）。共 16 个接口，`GET /api/health` 已实现并验证，其余 15 个待实现 |
+| v1.6 | 2026-10-04 | **前端接入读接口（Day 17 收尾），并修一处越权读取。** ① 前端 `storage.js` 的记录与收藏**优先走云函数读接口**（`apiGet()`，用 `auth.getAccessToken()` 的真实凭证；接口不可用时**静默回退**直连 rdb，离线行为与 Day 12 一致）；记录页新增「云端读取」面板，把接口地址、读到的条数与读取时间显示出来（验收要求「页面上显示的真实数据」）。② 函数补 **CORS 预检**（`OPTIONS → 204` + `allow-headers: Authorization`）—— 静态托管与网关是不同域名，而通道 A 必须带 `Authorization` 头，**带自定义头的跨域请求一定先发预检**，不处理就根本发不出真正的请求。③ ⚠️ **修一处越权读取**（迁移 `20261004230153`）：`20261004221126` 的 demo 读策略对 `authenticated` 也生效，导致已登录用户能读到全部 demo 行（实测库里 0 行的用户读到 9 条）。收紧为「前缀匹配 **且** `auth.uid()` 为空或等于 `'anon'`」，复测登录用户 `demo_leaked=0`、demo 通道仍正常。详见 §二「身份的两条通道」 |
 | v1.5 | 2026-10-04 | **两个 GET 读接口已实现并上线**：`GET /api/records`（2.1）与 `GET /api/favorites`（3.1），实现在 `cloudfunctions/api/`（事件型函数，与 health 同族），经网关路由暴露。同时新增「身份的两条通道」一节（见 §二末）——**RLS 自己就能按 uid 隔离，函数不手工拼 uid**；并新增示例数据读通道（`?uid=demo-yijing64-user-*`，由迁移 `20261004221126` 的 RLS 策略在数据库层兜底）。实测：两个接口返回真实数据；错误分支 401 / 403 / 404 / 405 / 422 全部按契约返回；`limit` / `before` 两个查询参数生效；改一行库数据后接口返回随之改变 |
 | v1.4 | 2026-10-04 | `db/schema.full.sql` **归并为 `db/schema.sql`**（唯一权威建表脚本），Day 12 的 4 表草稿改名为 `db/schema.day12-draft.sql` 留档 —— 因为验收清单第 4 条指向的是 `db/schema.sql`，而它当时是旧草稿。本节四处指引性引用已同步；变更记录里的历史引用保留 |
 | v1.3 | 2026-10-04 | 按课程验收清单检测后修订：示例数据由 15 行扩到 **36 行**（五个示例用户 a~e，**每张表 ≥ 5 行** —— 原先 `study_progress` 与 `gilded` 只有 2 行、`favorites` 3 行，不满足验收要求）；并新增**契约一致性三方比对**（本节 §三.2 ↔ `db/schema.full.sql` ↔ 线上实测，**79 项全一致、0 项不一致**） |

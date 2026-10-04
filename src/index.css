@@ -1310,6 +1310,31 @@ body {
 .rec-backup-title { margin: 0 0 6px; font-size: 16px; font-weight: 600; color: #3a2c18; }
 .rec-backup-note { margin: 0 0 12px; font-size: 13px; line-height: 1.7; color: #4b463d; }
 .rec-backup-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+
+/* ── 云端读取面板（Day 17）：接口地址与读到的条数在页面上可见 ── */
+.rec-cloud {
+  margin: 18px 0 0; padding: 16px 20px;
+  background: rgba(255, 255, 255, .5);
+  border: 1px solid rgba(90, 60, 28, .3);
+  border-radius: 8px;
+}
+.rec-cloud-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.rec-cloud-title { margin: 0; font-size: 16px; font-weight: 600; color: #3a2c18; }
+/* 徽标：靠底色 + 深字区分状态，不靠发光（浅底发光会把字晕开，R3 同一条律） */
+.rec-cloud-badge {
+  padding: 2px 9px; font-size: 12px; line-height: 1.6;
+  color: #5f4d3e; background: rgba(90, 60, 28, .1);
+  border: 1px solid rgba(90, 60, 28, .25); border-radius: 999px;
+}
+.rec-cloud-badge.is-api { color: #3f5d43; background: rgba(63, 93, 67, .12); border-color: rgba(63, 93, 67, .35); }
+.rec-cloud-note { margin: 0; font-size: 13px; line-height: 1.75; color: #4b463d; }
+.rec-cloud-note code {
+  padding: 1px 5px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+  color: #3a2c18; background: rgba(90, 60, 28, .1); border-radius: 4px;
+}
+.rec-cloud-url { word-break: break-all; color: #5f4d3e; }
+.rec-cloud-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.rec-cloud .rec-btn:disabled { opacity: .55; cursor: default; }
 .rec-backup-code,
 .rec-backup-input {
   width: 100%; margin-top: 10px; padding: 9px 12px;

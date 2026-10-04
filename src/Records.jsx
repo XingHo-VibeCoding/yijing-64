@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import hexData from '../data/64卦.json'
 import SourceTag from './SourceTag.jsx'
 import * as store from './storage.js'
@@ -35,6 +35,28 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
   const [code, setCode] = useState('')
   const [importText, setImportText] = useState('')
   const [msg, setMsg] = useState('')
+  /* 云端读取状态（Day 17）：让「数据是从接口读到的」在页面上看得见，
+     而不是只写在代码里。via=api 表示走了云函数读接口，rdb 表示已回退直连。 */
+  const [cloud, setCloud] = useState(() => store.cloudReadStatus())
+  const [busy, setBusy] = useState(false)
+
+  const readCloud = useCallback(async () => {
+    setBusy(true)
+    try {
+      await store.refreshFromCloud()
+      setCloud(store.cloudReadStatus())
+    } catch (e) {
+      setCloud({ ...store.cloudReadStatus(), detail: '读取失败：' + ((e && e.message) || '未知错误') })
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  // 页面打开时补一次状态（启动即拉取是异步的，首帧可能还没读回来）
+  useEffect(() => {
+    const t = setTimeout(() => setCloud(store.cloudReadStatus()), 1500)
+    return () => clearTimeout(t)
+  }, [])
   // ⚠️ 测验进度（F3）也算「有记录」—— 否则只测过一轮、还没起过卦时，
   //    这个页面会显示成空的，「清空我的记录」按钮就不出现，进度再也清不掉
   const empty = records.length === 0 && favorites.length === 0 && quizRounds === 0
@@ -238,6 +260,35 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
             {msg}
           </p>
         )}
+      </section>
+
+      {/* 云端读取（Day 17）：本项目的记录与收藏由云函数读接口从数据库读出，
+          身份判定在服务端与 RLS。这里把接口地址、读到的条数与读取时间显示出来 ——
+          「数据是接口给的」这件事在页面上可见，而不是只写在代码里。 */}
+      <section className="rec-cloud">
+        <div className="rec-cloud-head">
+          <h2 className="rec-cloud-title">云端读取</h2>
+          <span className={'rec-cloud-badge' + (cloud.via === 'api' ? ' is-api' : '')}>
+            {cloud.via === 'api' ? '来自读接口' : cloud.via === 'rdb' ? '已回退直连' : '读取中'}
+          </span>
+        </div>
+        <p className="rec-cloud-note">
+          接口 <code>GET /api/records</code> · <code>GET /api/favorites</code>
+          {cloud.detail ? (
+            <>
+              <br />
+              <span className="rec-cloud-url">{cloud.detail}</span>
+            </>
+          ) : null}
+          <br />
+          读到的数据 —— 起卦记录 <b>{cloud.records}</b> 条 · 收藏 <b>{cloud.favorites}</b> 条
+          {cloud.at ? <> · {new Date(cloud.at).toLocaleTimeString('zh-CN')}</> : null}
+        </p>
+        <div className="rec-cloud-row">
+          <button type="button" className="rec-btn" onClick={readCloud} disabled={busy}>
+            {busy ? '读取中…' : '重新读取'}
+          </button>
+        </div>
       </section>
 
       <SourceTag

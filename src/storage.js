@@ -59,6 +59,9 @@ const normChanging = (arr) =>
 const ENV_ID = import.meta.env.VITE_TCB_ENV_ID || ''
 const REGION = import.meta.env.VITE_TCB_REGION || 'ap-shanghai'
 const PUB_KEY = import.meta.env.VITE_PUBLISHABLE_KEY || ''
+/* 云函数读接口的网关域名（Day 17）。与静态托管不同域，所以是跨域调用 ——
+   网关会自动回显 Origin，预检由函数自己应答（OPTIONS → 204）。 */
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, '')
 
 const CLOUD_TIMEOUT_MS = 8000
 const withTimeout = (p) =>
@@ -68,6 +71,42 @@ const withTimeout = (p) =>
   ])
 
 const cloud = { app: null, auth: null, db: null, uid: null, ready: null, lastError: null }
+
+/* 最近一次「读」走的是哪条路、拿到多少条 —— 记录页要显示它，用户才看得见数据真的来自接口 */
+const cloudRead = { via: 'none', at: 0, records: 0, favorites: 0, detail: '' }
+
+/**
+ * 调 Day 17 的读接口（GET /api/records、GET /api/favorites）。
+ *
+ * 走「通道 A」：把当前匿名会话的 accessToken 作为 `Authorization: Bearer` 交给云函数，
+ * 函数**原样透传**给 PostgREST，由 RLS 按 uid 过滤 —— 前端不传 uid，也不该传。
+ * 身份取自 `auth.getAccessToken()`（SDK v3 的凭证接口）。
+ *
+ * @param {'records'|'favorites'} name
+ * @param {{limit?:number, before?:string}} [params] 值一律 encodeURIComponent，不拼 SQL
+ * @returns {Promise<{items:Array, meta:Object}>} 契约形状；非 2xx 或 ok:false 一律抛错（上层静默回退）
+ */
+async function apiGet(name, params = {}) {
+  if (!API_BASE) throw new Error('未配置 VITE_API_BASE')
+  const c = await cloudReady()
+  if (!c) throw new Error('云端未就绪')
+  const { accessToken } = await withTimeout(c.auth.getAccessToken())
+  if (!accessToken) throw new Error('取不到访问凭证')
+
+  const qs = new URLSearchParams()
+  if (Number.isInteger(params.limit)) qs.set('limit', String(params.limit))
+  if (params.before) qs.set('before', String(params.before))
+  const url = `${API_BASE}/api/${name}${qs.toString() ? '?' + qs.toString() : ''}`
+
+  const res = await withTimeout(fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } }))
+  const body = await res.json().catch(() => null)
+  if (!res.ok || !body || body.ok !== true) {
+    const msg = (body && body.error && body.error.message) || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return { items: body.items || [], meta: body.meta || {} }
+}
+
 
 /** 懒初始化：匿名登录一次；任何失败都置 ready=null（本次会话退化为纯本地模式） */
 function cloudReady() {
@@ -112,15 +151,35 @@ function notifySynced() {
   }
 }
 
-/* 启动时拉取云端 → 合并进本地（只增不删；本地已有的键以本地为准） */
+/* 启动时拉取云端 → 合并进本地（只增不删；本地已有的键以本地为准）
+ *
+ * Day 17 起：**记录与收藏优先走云函数读接口**（GET /api/records、/api/favorites）——
+ * 那是契约里登记的口径，身份由 RLS 判定。接口不可用（未配置 / 预检失败 / 网络不通）时
+ * **静默回退**到直连 rdb()，所以离线与降级行为和 Day 12 完全一致，用户无感。
+ */
 async function pullAndMerge() {
   const c = await cloudReady()
   if (!c) return
   // 起卦记录：云上有、本地没有的日期 → 落进本地
-  const { data: recRows, error: recErr } = await withTimeout(
-    c.db.from('divination_records').select('date, hexagram_id, changing_lines').eq('uid', c.uid)
-  )
-  if (!recErr && Array.isArray(recRows)) {
+  let recRows = null
+  try {
+    const r = await apiGet('records')
+    recRows = r.items
+    cloudRead.via = 'api'
+    cloudRead.records = recRows.length
+    cloudRead.detail = `${API_BASE}/api/records`
+  } catch (e) {
+    const { data, error } = await withTimeout(
+      c.db.from('divination_records').select('date, hexagram_id, changing_lines').eq('uid', c.uid)
+    )
+    if (error) throw e
+    recRows = data
+    cloudRead.via = cloudRead.via === 'api' ? 'api' : 'rdb'
+    cloudRead.records = Array.isArray(recRows) ? recRows.length : 0
+    cloudRead.detail = '直连数据库（接口不可用，已回退）'
+  }
+  cloudRead.at = Date.now()
+  if (Array.isArray(recRows)) {
     const local = read(K_RECORDS, [])
     const dates = new Set(local.map((r) => r.date))
     const merged = [...local]
@@ -129,8 +188,8 @@ async function pullAndMerge() {
       if (!dates.has(row.date)) {
         merged.push({
           date: row.date,
-          hexagramId: row.hexagram_id,
-          changingLines: normChanging(row.changing_lines),
+          hexagramId: row.hexagramId != null ? row.hexagramId : row.hexagram_id,
+          changingLines: normChanging(row.changingLines || row.changing_lines),
         })
         dirty = true
       }
@@ -142,17 +201,30 @@ async function pullAndMerge() {
     }
   }
   // 收藏：云上有、本地没有的 → 并进本地
-  const { data: favRows, error: favErr } = await withTimeout(
-    c.db.from('favorites').select('hexagram_id, created_at').eq('uid', c.uid)
-  )
-  if (!favErr && Array.isArray(favRows)) {
+  let favRows = null
+  try {
+    const r = await apiGet('favorites')
+    favRows = r.items
+    if (cloudRead.via !== 'api') cloudRead.via = 'api'
+    cloudRead.favorites = favRows.length
+  } catch (e) {
+    const { data, error } = await withTimeout(
+      c.db.from('favorites').select('hexagram_id, created_at').eq('uid', c.uid)
+    )
+    if (error) throw e
+    favRows = data
+    cloudRead.favorites = Array.isArray(favRows) ? favRows.length : 0
+  }
+  if (Array.isArray(favRows)) {
     const local = read(K_FAVORITES, [])
-    const ids = new Set(local.map((f) => f.hexagram_id))
+    const ids = new Set(local.map((f) => f.hexagramId))
     const merged = [...local]
     let dirty = false
     for (const row of favRows) {
-      if (!ids.has(row.hexagram_id)) {
-        merged.push({ hexagramId: row.hexagram_id, date: (row.created_at || '').slice(0, 10) || todayKey() })
+      const hid = row.hexagramId != null ? row.hexagramId : row.hexagram_id
+      if (!ids.has(hid)) {
+        const at = row.createdAt || row.created_at || ''
+        merged.push({ hexagramId: hid, date: String(at).slice(0, 10) || todayKey() })
         dirty = true
       }
     }
@@ -287,10 +359,45 @@ if (typeof window !== 'undefined') {
   pullAndMerge()
   try {
     window.__cloudDiag = () => ({ uid: cloud.uid, lastError: cloud.lastError, ready: !!cloud.ready })
+    // 调试出口：绕过「本地为准」的合并，直接看接口返回什么（验证「改库数据 → 接口跟着变」）
+    window.__apiRead = (name, params) => debugApiRead(name, params)
   } catch {
     /* 忽略 */
   }
 }
+
+/**
+ * 本次会话的云端读取状态（记录页显示它 —— 用户要能看见「数据是从接口读到的」）。
+ * @returns {{via:string, at:number, records:number, favorites:number, detail:string, uid:string|null}}
+ */
+export function cloudReadStatus() {
+  return { ...cloudRead, uid: cloud.uid }
+}
+
+/**
+ * 手动重新拉一次云端（记录页的「重新读取」按钮用）。
+ * @returns {Promise<{via:string, records:number, favorites:number}>}
+ */
+export async function refreshFromCloud() {
+  await pullAndMerge()
+  return { via: cloudRead.via, records: cloudRead.records, favorites: cloudRead.favorites }
+}
+
+/**
+ * 调试用：用当前会话的真实凭证直接打一次读接口，**原样返回接口的响应**。
+ *
+ * 用途是「改一条数据库数据 → 确认接口跟着变」这类验证：页面上的列表是
+ * 「本地为准、只增不删」的合并结果（记录不可事后改写，PRD F8），所以库里改了之后
+ * 页面**故意**不变 —— 要证明接口本身跟着变，就得绕过合并直接看接口返回。
+ *
+ * ⚠️ token 只在本机内存里用一次，不写 localStorage、不打日志、不外传。
+ * @returns {Promise<{status:number, body:any}>}
+ */
+export async function debugApiRead(name, params = {}) {
+  const r = await apiGet(name, params)
+  return { status: 200, body: { ok: true, items: r.items, meta: r.meta } }
+}
+
 
 /* ============================================================================
  * 本地读写（与 Day 12 之前完全一致 —— 上层组件的用法与语义不变）

@@ -66,13 +66,47 @@ const READS = {
   },
 }
 
-const json = (statusCode, obj) => ({
+/**
+ * CORS 预检响应。
+ *
+ * ⚠️ 为什么必须处理 OPTIONS：静态托管与 HTTP 访问服务是**两个不同域名**
+ *    （…tcloudbaseapp.com 与 …ap-shanghai.app.tcloudbase.com），所以前端 fetch 本接口是跨域的。
+ *    而通道 A 必须带 `Authorization` 头 —— 带自定义头的跨域请求**一定会先发预检**，
+ *    预检不过就根本发不出真正的请求（表现为浏览器控制台报错、请求根本没到函数）。
+ *
+ * 网关会自动回显 `Access-Control-Allow-Origin`（实测带 Origin 头时它就返回了），
+ * 但 `Access-Control-Allow-Headers` / `-Methods` 得自己给 —— 网关不代劳。
+ * 既然本函数只接受 GET，预检一律回 204（OPTIONS 不算「非 GET 业务请求」，
+ * 它是浏览器问「我能不能发这个请求」，不是用户发来的读请求）。
+ */
+function preflight(headers) {
+  const origin = headers.origin || '*'
+  return {
+    statusCode: 204,
+    headers: {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+      'Access-Control-Max-Age': '600',
+      Vary: 'Origin',
+    },
+    body: '',
+  }
+}
+
+const json = (statusCode, obj, headers) => ({
   statusCode,
-  headers: { 'Content-Type': 'application/json; charset=utf-8' },
+  headers: {
+    'Content-Type': 'application/json; charset=utf-8',
+    // 显式带上：不能只依赖网关回显，函数自己保证一份（含 Vary，避免被缓存串味）
+    'Access-Control-Allow-Origin': (headers && headers.origin) || '*',
+    Vary: 'Origin',
+  },
   body: JSON.stringify(obj),
 })
-const ok = (items, meta) => json(200, { ok: true, items, meta })
-const fail = (statusCode, code, message) => json(statusCode, { ok: false, error: { code, message } })
+const ok = (items, meta, headers) => json(200, { ok: true, items, meta }, headers)
+const fail = (statusCode, code, message, headers) =>
+  json(statusCode, { ok: false, error: { code, message } }, headers)
 
 /** 把 "a=1&b=2" 或 "?a=1&b=2" 解析成对象 */
 function parseQs(str) {
@@ -137,12 +171,15 @@ exports.main = async (event) => {
   // 两种都认：取最后一段，避免前缀差异导致路由不到。
   const name = path.replace(/\/+$/, '').split('/').filter(Boolean).pop() || ''
 
+  // 预检先答（跨域 + 带 Authorization 头时浏览器必发），不算业务请求
+  if (method === 'OPTIONS') return preflight(headers)
+
   if (method !== 'GET') {
-    return fail(405, 'METHOD_NOT_ALLOWED', '这个接口只接受 GET')
+    return fail(405, 'METHOD_NOT_ALLOWED', '这个接口只接受 GET', headers)
   }
   const spec = READS[name]
   if (!spec) {
-    return fail(404, 'NOT_FOUND', `没有这个接口：${path}`)
+    return fail(404, 'NOT_FOUND', `没有这个接口：${path}`, headers)
   }
 
   // ── 1. 决定用哪条通道拿数据 ──
@@ -154,31 +191,31 @@ exports.main = async (event) => {
   } else if (qs.uid) {
     if (!DEMO_UID_RE.test(String(qs.uid))) {
       // 明确拒绝「用 uid 参数读别人的数据」——这是契约 §二「客户端不得传 uid」的兜底
-      return fail(403, 'FORBIDDEN', 'uid 参数只接受示例数据（demo-yijing64-user-*）')
+      return fail(403, 'FORBIDDEN', 'uid 参数只接受示例数据（demo-yijing64-user-*）', headers)
     }
     demoUid = String(qs.uid)
     token = process.env.PUBLISHABLE_KEY || ''
     if (!token) {
-      return fail(503, 'UPSTREAM_UNAVAILABLE', '未配置 PUBLISHABLE_KEY，无法读取示例数据')
+      return fail(503, 'UPSTREAM_UNAVAILABLE', '未配置 PUBLISHABLE_KEY，无法读取示例数据', headers)
     }
   } else {
-    return fail(401, 'UNAUTHENTICATED', '缺少会话：请带 Authorization 头，或用 ?uid=demo-yijing64-user-a 读示例数据')
+    return fail(401, 'UNAUTHENTICATED', '缺少会话：请带 Authorization 头，或用 ?uid=demo-yijing64-user-a 读示例数据', headers)
   }
 
   // ── 2. 参数校验（先校验、再拼查询串）──
   let limit = spec.defaultLimit
   if (qs.limit !== undefined && qs.limit !== '') {
     if (!/^\d{1,4}$/.test(String(qs.limit))) {
-      return fail(422, 'VALIDATION_FAILED', 'limit 必须是正整数')
+      return fail(422, 'VALIDATION_FAILED', 'limit 必须是正整数', headers)
     }
     limit = Number(qs.limit)
     if (limit < 1 || limit > spec.maxLimit) {
-      return fail(422, 'VALIDATION_FAILED', `limit 必须在 1 – ${spec.maxLimit} 之间`)
+      return fail(422, 'VALIDATION_FAILED', `limit 必须在 1 – ${spec.maxLimit} 之间`, headers)
     }
   }
   if (qs.before !== undefined && qs.before !== '') {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(qs.before))) {
-      return fail(422, 'VALIDATION_FAILED', 'before 必须是 YYYY-MM-DD')
+      return fail(422, 'VALIDATION_FAILED', 'before 必须是 YYYY-MM-DD', headers)
     }
   }
 
@@ -198,26 +235,26 @@ exports.main = async (event) => {
   try {
     res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
   } catch (e) {
-    return fail(503, 'UPSTREAM_UNAVAILABLE', '连不上数据库 HTTP 接口')
+    return fail(503, 'UPSTREAM_UNAVAILABLE', '连不上数据库 HTTP 接口', headers)
   }
   const text = await res.text()
   try {
     payload = JSON.parse(text)
   } catch (e) {
-    return fail(503, 'UPSTREAM_UNAVAILABLE', '数据库返回的不是 JSON')
+    return fail(503, 'UPSTREAM_UNAVAILABLE', '数据库返回的不是 JSON', headers)
   }
   if (!res.ok) {
     // PostgREST 的错误体是 { code, details, hint, message }
     return fail(res.status === 401 ? 401 : 500,
       res.status === 401 ? 'UNAUTHENTICATED' : 'INTERNAL',
-      (payload && payload.message) || '数据库查询失败')
+      (payload && payload.message) || '数据库查询失败', headers)
   }
   if (!Array.isArray(payload)) {
-    return fail(500, 'INTERNAL', '数据库返回形状异常')
+    return fail(500, 'INTERNAL', '数据库返回形状异常', headers)
   }
 
   // payload 是「多取一条」的原始结果：条数先留着，截断后再算 meta
   const rawCount = payload.length
   const items = payload.slice(0, limit).map(spec.map)
-  return ok(items, spec.meta(rawCount, items.length))
+  return ok(items, spec.meta(rawCount, items.length), headers)
 }
