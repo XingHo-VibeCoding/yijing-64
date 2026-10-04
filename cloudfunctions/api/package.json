@@ -1,0 +1,6 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "读取接口云函数：GET /api/records 与 GET /api/favorites（第 3 周任务②，契约 §四）"
+}

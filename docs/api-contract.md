@@ -53,6 +53,35 @@
 | 500 | `INTERNAL` | 服务端未预期错误 |
 | 503 | `UPSTREAM_UNAVAILABLE` | 数据库等下游不可用 |
 
+
+### 身份的两条通道（Day 17 已核实并落地）
+
+原先「认证」那一行只写了「服务端从会话取 uid」，但没写清**会话怎么到函数手里**。Day 17 查实了官方链路
+（`docs.cloudbase.net/authentication-v2/auth/auth-pg`）并按它实现：
+
+```
+客户端 Authorization: Bearer <JWT> → 网关解析 JWT、注入数据库会话变量 request.jwt.claims
+  → PostgREST 以对应角色执行 → 表级 GRANT + 行级 RLS 双重校验
+  而 auth.uid() 就是 auth.jwt()->>'sub'
+```
+
+**关键结论：RLS 自己就能完成按 uid 隔离，接口不需要自己拼 uid 过滤条件。**
+所以本项目的读接口有两条通道：
+
+| 通道 | 怎么调 | 服务端拿什么身份 | 能读到 |
+| --- | --- | --- | --- |
+| **A · 会话**（契约口径，默认） | 带 `Authorization: Bearer <access_token>` | 头里的 token **原样透传**给 PostgREST | 调用者自己的行（RLS 过滤，函数不手工传 uid） |
+| **B · 示例数据**（无会话时） | `?uid=demo-yijing64-user-a` | 函数环境变量里的 `PUBLISHABLE_KEY`（`role=anon`、`sub='anon'`） | **仅 `demo-yijing64-user-%` 前缀的行** |
+
+**通道 B 的安全边界是数据库兜的，不是只靠函数判断**：
+RLS 策略 `read demo records` / `read demo favorites`（迁移 `20261004221126`）只放行
+`uid like 'demo-yijing64-user-%'`，而真实 uid 由匿名登录生成、是 UUID 形状，永远匹配不上该前缀。
+已实测：Publishable Key 身份读到 9 条 demo 记录，且**真实数据泄漏条数 = 0**。
+另外函数层也再挡一道 —— `?uid=` 传非 demo 前缀一律 `403 FORBIDDEN`（对应契约「客户端不得传 uid」）。
+
+> ⚠️ `PUBLISHABLE_KEY` 是**设计上就公开**的凭证（`role=anon`，只能读 RLS 放行的行），
+> 本项目前端本来就在用它；它只作为云函数环境变量注入，**不写进代码、不进仓库**。
+
 ---
 
 ## 三、数据模型（第 3 周要建的表）
@@ -266,7 +295,7 @@
 
 ### 二、起卦记录（表 `divination_records`）
 
-#### 2.1 `GET /api/records` — 记录列表（记录页 / 每日首卦银边）
+#### 2.1 `GET /api/records` — 记录列表（记录页 / 每日首卦银边） ✅ 已实现（2026-10-04）
 
 | | |
 | --- | --- |
@@ -312,7 +341,7 @@
 
 ### 三、收藏（表 `favorites`）
 
-#### 3.1 `GET /api/favorites` — 收藏列表（记录页 / 收藏钉状态）
+#### 3.1 `GET /api/favorites` — 收藏列表（记录页 / 收藏钉状态） ✅ 已实现（2026-10-04）
 
 | | |
 | --- | --- |
@@ -505,6 +534,7 @@
 | 版本 | 日期 | 内容 |
 | --- | --- | --- |
 | v1 | 2026-10-02 | 首版：登记全部接口占位（第 3 周依据）。共 16 个接口，`GET /api/health` 已实现并验证，其余 15 个待实现 |
+| v1.5 | 2026-10-04 | **两个 GET 读接口已实现并上线**：`GET /api/records`（2.1）与 `GET /api/favorites`（3.1），实现在 `cloudfunctions/api/`（事件型函数，与 health 同族），经网关路由暴露。同时新增「身份的两条通道」一节（见 §二末）——**RLS 自己就能按 uid 隔离，函数不手工拼 uid**；并新增示例数据读通道（`?uid=demo-yijing64-user-*`，由迁移 `20261004221126` 的 RLS 策略在数据库层兜底）。实测：两个接口返回真实数据；错误分支 401 / 403 / 404 / 405 / 422 全部按契约返回；`limit` / `before` 两个查询参数生效；改一行库数据后接口返回随之改变 |
 | v1.4 | 2026-10-04 | `db/schema.full.sql` **归并为 `db/schema.sql`**（唯一权威建表脚本），Day 12 的 4 表草稿改名为 `db/schema.day12-draft.sql` 留档 —— 因为验收清单第 4 条指向的是 `db/schema.sql`，而它当时是旧草稿。本节四处指引性引用已同步；变更记录里的历史引用保留 |
 | v1.3 | 2026-10-04 | 按课程验收清单检测后修订：示例数据由 15 行扩到 **36 行**（五个示例用户 a~e，**每张表 ≥ 5 行** —— 原先 `study_progress` 与 `gilded` 只有 2 行、`favorites` 3 行，不满足验收要求）；并新增**契约一致性三方比对**（本节 §三.2 ↔ `db/schema.full.sql` ↔ 线上实测，**79 项全一致、0 项不一致**） |
 | v1.2 | 2026-10-02 | 第三节的执行步骤补注：本节描述的结构与示例数据**已于 2026-10-02 落库**（迁移 `20261002234609_add_check_constraints_and_index` + `db/seed.sql` 的 15 行示例），并更正约束总数 —— 真库实测为 5 条主键 + **6 条** CHECK（此前误写为 5） |
