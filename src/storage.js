@@ -361,6 +361,8 @@ if (typeof window !== 'undefined') {
     window.__cloudDiag = () => ({ uid: cloud.uid, lastError: cloud.lastError, ready: !!cloud.ready })
     // 调试出口：绕过「本地为准」的合并，直接看接口返回什么（验证「改库数据 → 接口跟着变」）
     window.__apiRead = (name, params) => debugApiRead(name, params)
+    // 调试出口：带真实会话发 POST（Day 18 写入接口验证）
+    window.__apiWrite = (name, body) => debugApiWrite(name, body)
   } catch {
     /* 忽略 */
   }
@@ -396,6 +398,30 @@ export async function refreshFromCloud() {
 export async function debugApiRead(name, params = {}) {
   const r = await apiGet(name, params)
   return { status: 200, body: { ok: true, items: r.items, meta: r.meta } }
+}
+
+/**
+ * 调试用：带当前会话的真实凭证发一次 POST（Day 18 验收「真实写入 + 读回」用）。
+ * ⚠️ 只在浏览器控制台 / 自动化里手动调用，不参与任何业务路径。
+ * @param {'favorites'} name
+ * @param {object} body 请求体（如 { hexagramId: 12 }）
+ * @returns {Promise<{status:number, body:any}>} 原样返回接口响应，便于核对状态码与信封
+ */
+export async function debugApiWrite(name, body) {
+  if (!API_BASE) throw new Error('未配置 VITE_API_BASE')
+  const c = await cloudReady()
+  if (!c) throw new Error('云端未就绪')
+  const { accessToken } = await withTimeout(c.auth.getAccessToken())
+  if (!accessToken) throw new Error('取不到访问凭证')
+  const res = await withTimeout(
+    fetch(`${API_BASE}/api/${name}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  )
+  const parsed = await res.json().catch(() => null)
+  return { status: res.status, body: parsed }
 }
 
 

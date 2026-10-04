@@ -369,13 +369,24 @@ RLS 策略 `read demo records` / `read demo favorites` 只放行
 
 > `createdAt` 只到**日**（下游把 `timestamptz` 截断为 `YYYY-MM-DD`）—— 与「不存精确时刻」的口径一致。
 
-#### 3.2 `POST /api/favorites` — 添加收藏
+#### 3.2 `POST /api/favorites` — 添加收藏 ✅ 已实现（2026-10-04）
 
 | | |
 | --- | --- |
 | **请求参数** | body：`{ "hexagramId": 12 }` |
 | **响应 201**（新建）/ **200**（已收藏） | `{ "ok": true, "data": { "hexagramId": 12, "createdAt": "2026-10-02" } }` |
 | **错误** | `401`、`422`（`hexagramId` 不在 1–64） |
+
+> **实现要点（Day 18 实测）**：
+> ① **防重复按契约的「幂等」口径**：已存在 → 返回 **200** 且**不写库**（保留最初的 `createdAt`），
+>    唯一性由主键 `(uid, hexagram_id)` 兜底。⚠️ 这里**刻意不用** `Prefer: resolution=merge-duplicates`（upsert）——
+>    在有 RLS 的表上它会先读现有行，触发 `new row violates row-level security policy (USING expression)`，
+>    导致「第一次成功、重复必然 401」，正好与目标相反。
+> ② **写入只接受真实会话**（通道 A），**不支持** `?uid=demo-*` 写入 —— 公开凭证能写行等于开匿名写入口。
+> ③ `created_at` 显式按 **`Asia/Shanghai` 当天零点**写入（云函数运行时是 UTC）。
+>    ⚠️ 日期格式化**不能**用 `Intl.DateTimeFormat('en-CA').format()`：它的输出取决于运行时 ICU 版本，
+>    云函数（Node 18）实测返回美式 `10/04/2026`。改用 `formatToParts()` 逐字段取再自己拼。
+> ④ 校验分四步、逐条给中文原因：body 非法 JSON → 400；缺 `hexagramId` / 非整数 / 越界 → 422。
 
 #### 3.3 `DELETE /api/favorites/:hexagramId` — 取消收藏
 
@@ -542,6 +553,7 @@ RLS 策略 `read demo records` / `read demo favorites` 只放行
 | 版本 | 日期 | 内容 |
 | --- | --- | --- |
 | v1 | 2026-10-02 | 首版：登记全部接口占位（第 3 周依据）。共 16 个接口，`GET /api/health` 已实现并验证，其余 15 个待实现 |
+| v1.7 | 2026-10-04 | **`POST /api/favorites`（3.2）已实现并上线。** 防重复按契约的**幂等**口径：已存在返回 200 且不写库，唯一性由主键兜底；校验分四步并逐条给中文原因（缺字段 / 非整数 / 越界 / body 非法）；`created_at` 显式按 Asia/Shanghai 当天零点写入。实测：正常 201、重复 200（连发 3 次库里仍 1 行）、缺字段 422、越界 422、非整数 422、无会话 401、demo 身份写入 401；写入后 `GET /api/favorites` 能读出新增行。详见 §三.3 的实现要点 |
 | v1.6 | 2026-10-04 | **前端接入读接口（Day 17 收尾），并修一处越权读取。** ① 前端 `storage.js` 的记录与收藏**优先走云函数读接口**（`apiGet()`，用 `auth.getAccessToken()` 的真实凭证；接口不可用时**静默回退**直连 rdb，离线行为与 Day 12 一致）；记录页新增「云端读取」面板，把接口地址、读到的条数与读取时间显示出来（验收要求「页面上显示的真实数据」）。② 函数补 **CORS 预检**（`OPTIONS → 204` + `allow-headers: Authorization`）—— 静态托管与网关是不同域名，而通道 A 必须带 `Authorization` 头，**带自定义头的跨域请求一定先发预检**，不处理就根本发不出真正的请求。③ ⚠️ **修一处越权读取**（迁移 `20261004230153`）：`20261004221126` 的 demo 读策略对 `authenticated` 也生效，导致已登录用户能读到全部 demo 行（实测库里 0 行的用户读到 9 条）。收紧为「前缀匹配 **且** `auth.uid()` 为空或等于 `'anon'`」，复测登录用户 `demo_leaked=0`、demo 通道仍正常。详见 §二「身份的两条通道」 |
 | v1.5 | 2026-10-04 | **两个 GET 读接口已实现并上线**：`GET /api/records`（2.1）与 `GET /api/favorites`（3.1），实现在 `cloudfunctions/api/`（事件型函数，与 health 同族），经网关路由暴露。同时新增「身份的两条通道」一节（见 §二末）——**RLS 自己就能按 uid 隔离，函数不手工拼 uid**；并新增示例数据读通道（`?uid=demo-yijing64-user-*`，由迁移 `20261004221126` 的 RLS 策略在数据库层兜底）。实测：两个接口返回真实数据；错误分支 401 / 403 / 404 / 405 / 422 全部按契约返回；`limit` / `before` 两个查询参数生效；改一行库数据后接口返回随之改变 |
 | v1.4 | 2026-10-04 | `db/schema.full.sql` **归并为 `db/schema.sql`**（唯一权威建表脚本），Day 12 的 4 表草稿改名为 `db/schema.day12-draft.sql` 留档 —— 因为验收清单第 4 条指向的是 `db/schema.sql`，而它当时是旧草稿。本节四处指引性引用已同步；变更记录里的历史引用保留 |

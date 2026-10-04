@@ -122,6 +122,99 @@ function parseQs(str) {
 }
 
 /**
+ * 取请求体里的业务字段（POST 用）。
+ *
+ * ⚠️ 网关可能把 body 做成 base64（`isBase64Encoded: true`），也可能已经是对象或 JSON 串 ——
+ *    三种都兜住。任何一种解不出来都返回 null，由调用方报 400（而不是当成「空 body」蒙过去）。
+ */
+function readJsonBody(event) {
+  if (!event) return null
+  let raw = event.body
+  if (raw == null) return null
+  if (event.isBase64Encoded) {
+    try {
+      raw = Buffer.from(String(raw), 'base64').toString('utf8')
+    } catch (e) {
+      return null
+    }
+  }
+  if (typeof raw === 'object') return raw
+  const text = String(raw).trim()
+  if (!text) return null
+  try {
+    const v = JSON.parse(text)
+    return v && typeof v === 'object' ? v : null
+  } catch (e) {
+    return null
+  }
+}
+
+/**
+ * 业务日：按 Asia/Shanghai 取「今天」，返回 YYYY-MM-DD。
+ *
+ * ⚠️ 两个踩过的点：
+ *   ① 云函数运行时**默认 UTC**，直接 `toISOString()` 会在每天 08:00 前算成前一天 ——
+ *      契约 §一 要求「服务器本地日」，所以必须显式带时区。
+ *   ② **不能用 `Intl.DateTimeFormat('en-CA', …).format()`** —— 它的输出格式**取决于运行时的 ICU 版本**：
+ *      本机 Node 22 返回 `2026-10-04`，而云函数（Node 18）实测返回 `10/04/2026`（美式）。
+ *      `en-CA` 并不是 everywhere 都输出 ISO 格式。改用 `formatToParts()` 逐字段取，
+ *      **自己拼字符串**，结果就与 ICU 无关了。
+ */
+function shanghaiToday() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const g = {}
+  for (const p of parts) g[p.type] = p.value
+  return g.year + '-' + g.month + '-' + g.day
+}
+
+/**
+ * 从会话 token 里取出 uid（sub），供**写入**接口填 `uid` 列。
+ *
+ * ⚠️ 为什么只有写接口才需要「自己拼 uid」：读接口由 RLS 的 `uid = current_uid()` 自动过滤，
+ *    查询里完全不带 uid（契约 §二）。而写入必须**显式提供** uid —— 否则 PostgREST 无从得知这行是谁的。
+ *
+ * ⭐ 安全性论证（为什么这不是「自己拼 uid 过滤」那个反模式）：
+ *   ① JWT payload 只是 base64url 编码、**未加密**，本函数解它只是为了拿到 `sub`；
+ *   ② 真正的把关在下游 —— 同一个 token 会被转发给 PostgREST，**PostgREST 验签**，
+ *      签名无效则整个请求 401，压根写不进去；
+ *   ③ 就算签名有效，RLS 的 `with check (uid = current_uid())` 会再校验一次，
+ *      填错 uid 直接被数据库拒（42501）。
+ *   三层里任何一层不通过都写不进去，所以「解 payload」这个动作本身开不出越权入口。
+ */
+function uidFromToken(token) {
+  const parts = String(token || '').split('.')
+  if (parts.length < 2) return ''
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+    return payload && typeof payload.sub === 'string' ? payload.sub : ''
+  } catch (e) {
+    return ''
+  }
+}
+
+/** 极简服务日志：只记「谁在什么时候做了什么、结果如何」，**绝不记 token / 完整请求体** */
+function logEvent(level, event, detail) {
+  const line = JSON.stringify({
+    ts: new Date().toISOString(),
+    level,
+    event,
+    detail: detail || {},
+  })
+  try {
+    if (level === 'error') console.error(line)
+    else console.log(line)
+  } catch (e) {
+    /* 日志失败绝不能影响业务 */
+  }
+}
+
+
+/**
  * 从网关事件里取出路径、查询串、请求头。
  * ⚠️ 不同网关版本 / 不同触发方式下字段位置不一样（health 只用到 httpMethod），
  *    所以这里把已知的所有可能来源都兜住 —— 少兜一个就可能取不到 ?uid= 而误报 401。
@@ -163,6 +256,178 @@ function readRequest(event) {
   return { path: pathOnly, qs, headers: lower }
 }
 
+/* ============================================================================
+ * 写接口：POST /api/favorites（契约 3.2）
+ * ==========================================================================*/
+
+/**
+ * POST /api/favorites —— 添加收藏
+ *
+ * 契约 3.2 原文：
+ *   请求   body：{ "hexagramId": 12 }
+ *   响应   201（新建）/ 200（已收藏）→ { ok: true, data: { hexagramId, createdAt } }
+ *   错误   401、422（hexagramId 不在 1–64）
+ *
+ * ── 防重复：按契约「幂等」处理，**不返回 409** ──
+ *   契约 §一「幂等」一节写明「写接口一律幂等（重复调用不产生重复数据、不报错）」，
+ *   且 3.2 明确区分 201 / 200 两种成功码 —— 所以重复收藏**照常成功**，只是状态码 200。
+ *   落库靠主键 `(uid, hexagram_id)` + `Prefer: resolution=merge-duplicates`（upsert 语义），
+ *   唯一的保证来自数据库主键，**不靠「先查后写」**（那样有并发竞态）。
+ *
+ * ── 校验顺序（错了要说清缺什么，所以逐项检查并给出中文原因）──
+ *   ① body 能否解析成 JSON      → 400「请求体不是合法的 JSON」
+ *   ② hexagramId 是否存在        → 422「缺少必填字段 hexagramId（要收藏的卦序号）」
+ *   ③ 是否为整数                 → 422「hexagramId 必须是整数」
+ *   ④ 是否在 1–64                → 422「hexagramId 必须在 1 – 64 之间」
+ */
+async function postFavorites(event, headers) {
+  // ── 身份：写入只走通道 A（必须真实会话）──
+  // ⚠️ 刻意**不**支持 ?uid=demo-* 写入 —— 示例数据是给人看的，
+  //    让公开凭证能往库里写行，等于开一个匿名写入口。契约 §二也写明「客户端不得传 uid」。
+  const caller = headers.authorization || ''
+  if (!/^Bearer\s+\S+/i.test(caller)) {
+    logEvent('warn', 'favorites.post', { reason: 'missing_session' })
+    return fail(401, 'UNAUTHENTICATED', '请先登录后再收藏（需要带上会话）', headers)
+  }
+  const token = caller.replace(/^Bearer\s+/i, '').trim()
+  const uid = uidFromToken(token)
+  if (!uid || uid === 'anon') {
+    logEvent('warn', 'favorites.post', { reason: 'no_uid_in_token' })
+    return fail(401, 'UNAUTHENTICATED', '会话里没有身份信息，无法收藏', headers)
+  }
+
+  // ── 校验 body ──
+  const body = readJsonBody(event)
+  if (body === null) {
+    return fail(400, 'BAD_REQUEST', '请求体不是合法的 JSON（应形如 {"hexagramId": 12}）', headers)
+  }
+  if (body.hexagramId === undefined || body.hexagramId === null || body.hexagramId === '') {
+    return fail(422, 'VALIDATION_FAILED', '缺少必填字段 hexagramId（要收藏的卦序号，1 – 64）', headers)
+  }
+  const raw = body.hexagramId
+  const hexagramId = typeof raw === 'string' ? Number(raw.trim()) : raw
+  if (!Number.isInteger(hexagramId)) {
+    return fail(422, 'VALIDATION_FAILED',
+      'hexagramId 必须是整数，收到的是「' + String(raw).slice(0, 20) + '」', headers)
+  }
+  if (hexagramId < 1 || hexagramId > 64) {
+    return fail(422, 'VALIDATION_FAILED',
+      'hexagramId 必须在 1 – 64 之间，收到的是 ' + hexagramId, headers)
+  }
+
+  // ── 判定是否已存在 ──
+  // ⚠️ 这里用「先查 → 已存在就短路返回 / 不存在才 INSERT」，**不用 upsert**。
+  //    原因（实测踩到）：`Prefer: resolution=merge-duplicates`（ON CONFLICT DO UPDATE）
+  //    在有 RLS 的表上会先读现有行，于是 SELECT 策略也参与了判定 ——
+  //    报错 `new row violates row-level security policy (USING expression)`，HTTP 401。
+  //    第一次 POST（无冲突、只走 INSERT）成功，**重复 POST 必然失败**，正好与目标相反。
+  //    正确做法：已存在 → 直接返回 200 且**不写库**（契约要的就是「不产生重复数据、不报错」，
+  //    而且不改动原有的 createdAt 更符合「收藏时间就是第一次收藏的时间」）。
+  //    唯一性仍由主键 `(uid, hexagram_id)` 兜底；万一并发下撞了，409 分支会重读一次按 200 返回。
+  const before = await readOneFavorite(token, hexagramId)
+  if (before) {
+    logEvent('info', 'favorites.post', { uid: uid, hexagramId: hexagramId, result: 'already_exists' })
+    return json(200, { ok: true, data: before }, headers)
+  }
+
+  // ── 写入（纯 INSERT，不带 on_conflict）──
+  const url = REST_BASE + '/v1/rdb/rest/favorites'
+  const payloadRow = {
+    uid: uid,
+    hexagram_id: hexagramId,
+    // ⚠️ 契约 §一「不存时刻」：表里有 created_at（下游只截断到日），
+    //    但**显式按 Asia/Shanghai 写**当天零点，不让服务器 UTC 时区决定是几号。
+    created_at: shanghaiToday() + 'T00:00:00+08:00',
+  }
+  let res, text, back
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json; charset=utf-8',
+        // ⚠️ 刻意**不加** return=representation —— 那会让 PostgREST 对新行再跑一次
+        //    `USING` 校验，而策略的 `USING` 是给「已存在的行」写的，对刚插入的行会判不通过。
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(payloadRow),
+    })
+    text = await res.text()
+  } catch (e) {
+    logEvent('error', 'favorites.post', { hexagramId: hexagramId, error: String((e && e.message) || e) })
+    return fail(503, 'UPSTREAM_UNAVAILABLE',
+      '连不上数据库，写入没有完成（本地已生效，可稍后重试）', headers)
+  }
+  try {
+    back = text ? JSON.parse(text) : null
+  } catch (e) {
+    back = null
+  }
+
+  if (!res.ok) {
+    const message = (back && back.message) || '写入失败'
+    logEvent('error', 'favorites.post', { hexagramId: hexagramId, upstream: res.status, message: message })
+    if (res.status === 401) {
+      // ⚠️ 不要把上游错误体吞掉：同一个 401 有两种完全不同的情况 ——
+      //    「token 真的失效」与「token 有效但这个请求不被接受」（如 on_conflict 参数不被支持）。
+      //    笼统说「会话已过期」会把后者误导成前者，排查时会走错方向。
+      //    这里给用户一句可理解的话，但把上游原文放进 detail 便于定位。
+      const upstream = String((back && back.message) || '').slice(0, 200)
+      logEvent('error', 'favorites.post', { hexagramId: hexagramId, upstream: 401, upstreamMsg: upstream })
+      return json(401, {
+        ok: false,
+        error: {
+          code: 'UNAUTHENTICATED',
+          message: '写入被数据库拒绝：会话无法通过校验。若刚登录过就重试一次；仍不行请看服务端日志。',
+          detail: upstream,
+        },
+      }, headers)
+    }
+    // 403 / 42501：RLS 的 with check 没通过 —— 说明填的 uid 与会话不符
+    if (res.status === 403) return fail(403, 'FORBIDDEN', '没有权限写入这一行', headers)
+    if (res.status === 409) {
+      // 并发下两个人同时收藏同一卦：主键挡住了重复。重读一次按「已存在」返回 200（仍是幂等成功）
+      const again = await readOneFavorite(token, hexagramId)
+      if (again) return json(200, { ok: true, data: again }, headers)
+      return fail(409, 'CONFLICT', '这一卦已在收藏里', headers)
+    }
+    return fail(500, 'INTERNAL', message, headers)
+  }
+
+  const data = { hexagramId: hexagramId, createdAt: shanghaiToday() }
+  logEvent('info', 'favorites.post', { uid: uid, hexagramId: hexagramId, result: 'created' })
+  return json(201, { ok: true, data: data }, headers)
+}
+
+/**
+ * 读单条收藏，用于判定「是否已存在」。
+ * ⚠️ 查询**不带 uid 条件** —— RLS 的 `uid = current_uid()` 自动只返回自己的行，
+ *    这也顺带证明了「不会把别人的收藏算成自己的」。
+ * 任何异常都当 null（读不到不影响主流程，写入的成败由 upsert 的响应决定）。
+ */
+async function readOneFavorite(token, hexagramId) {
+  try {
+    const url = REST_BASE + '/v1/rdb/rest/favorites?select='
+      + encodeURIComponent('hexagram_id,created_at')
+      + '&hexagram_id=eq.' + encodeURIComponent(String(hexagramId))
+      + '&limit=1'
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } })
+    if (!res.ok) return null
+    const rows = await res.json()
+    if (!Array.isArray(rows) || !rows.length) return null
+    const r = rows[0]
+    return {
+      hexagramId: r.hexagram_id != null ? r.hexagram_id : hexagramId,
+      createdAt: String(r.created_at || '').slice(0, 10),
+    }
+  } catch (e) {
+    return null
+  }
+}
+
+/* ============================================================================
+ * 入口：解析请求 → 分派（GET 读 / POST 写）
+ * ==========================================================================*/
 exports.main = async (event) => {
   const method = String((event && (event.httpMethod || event.method)) || 'GET').toUpperCase()
   const { path, qs, headers } = readRequest(event || {})
@@ -174,12 +439,19 @@ exports.main = async (event) => {
   // 预检先答（跨域 + 带 Authorization 头时浏览器必发），不算业务请求
   if (method === 'OPTIONS') return preflight(headers)
 
+  /* ── 写：POST /api/favorites ── */
+  if (name === 'favorites' && method === 'POST') {
+    return postFavorites(event, headers)
+  }
+
+  /* ── 读：GET /api/records、GET /api/favorites ── */
   if (method !== 'GET') {
-    return fail(405, 'METHOD_NOT_ALLOWED', '这个接口只接受 GET', headers)
+    return fail(405, 'METHOD_NOT_ALLOWED',
+      name === 'favorites' ? '这个接口用 POST 访问（提交 body）' : '这个接口只接受 GET', headers)
   }
   const spec = READS[name]
   if (!spec) {
-    return fail(404, 'NOT_FOUND', `没有这个接口：${path}`, headers)
+    return fail(404, 'NOT_FOUND', '没有这个接口：' + path, headers)
   }
 
   // ── 1. 决定用哪条通道拿数据 ──
@@ -199,7 +471,8 @@ exports.main = async (event) => {
       return fail(503, 'UPSTREAM_UNAVAILABLE', '未配置 PUBLISHABLE_KEY，无法读取示例数据', headers)
     }
   } else {
-    return fail(401, 'UNAUTHENTICATED', '缺少会话：请带 Authorization 头，或用 ?uid=demo-yijing64-user-a 读示例数据', headers)
+    return fail(401, 'UNAUTHENTICATED',
+      '缺少会话：请带 Authorization 头，或用 ?uid=demo-yijing64-user-a 读示例数据', headers)
   }
 
   // ── 2. 参数校验（先校验、再拼查询串）──
@@ -210,7 +483,7 @@ exports.main = async (event) => {
     }
     limit = Number(qs.limit)
     if (limit < 1 || limit > spec.maxLimit) {
-      return fail(422, 'VALIDATION_FAILED', `limit 必须在 1 – ${spec.maxLimit} 之间`, headers)
+      return fail(422, 'VALIDATION_FAILED', 'limit 必须在 1 – ' + spec.maxLimit + ' 之间', headers)
     }
   }
   if (qs.before !== undefined && qs.before !== '') {
@@ -221,19 +494,19 @@ exports.main = async (event) => {
 
   // ── 3. 组装 PostgREST 查询（值全部编码，不做字符串拼接 SQL）──
   const q = [
-    `select=${encodeURIComponent(spec.select)}`,
-    `order=${encodeURIComponent(spec.order)}`,
-    `limit=${limit + 1}`,              // 多取一条，用来判断 hasMore
+    'select=' + encodeURIComponent(spec.select),
+    'order=' + encodeURIComponent(spec.order),
+    'limit=' + (limit + 1),              // 多取一条，用来判断 hasMore
   ]
-  if (demoUid) q.push(`uid=eq.${encodeURIComponent(demoUid)}`)
+  if (demoUid) q.push('uid=eq.' + encodeURIComponent(demoUid))
   // 通道 A 不加任何 uid 条件：RLS 的 `uid = current_uid()` 会自动只返回自己的行
-  if (qs.before) q.push(`date=lt.${encodeURIComponent(String(qs.before))}`)
+  if (qs.before) q.push('date=lt.' + encodeURIComponent(String(qs.before)))
 
-  const url = `${REST_BASE}/v1/rdb/rest/${spec.table}?${q.join('&')}`
+  const url = REST_BASE + '/v1/rdb/rest/' + spec.table + '?' + q.join('&')
 
   let res, payload
   try {
-    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } })
   } catch (e) {
     return fail(503, 'UPSTREAM_UNAVAILABLE', '连不上数据库 HTTP 接口', headers)
   }
