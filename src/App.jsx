@@ -5,6 +5,7 @@ import yaoData from '../data/64卦-爻辞.json'
 import HexagramFigure from './HexagramFigure.jsx'
 import CastingAnimation from './CastingAnimation.jsx'
 import Records from './Records.jsx'
+import RestoreNotice from './RestoreNotice.jsx'
 import Quiz from './Quiz.jsx'
 import SourceTag from './SourceTag.jsx'
 import InkTransition from './InkTransition.jsx'
@@ -705,6 +706,7 @@ export default function App() {
   return (
     <>
       {viewNode}
+      <RestoreNotice />
       {overlay}
       {mist}
       {ceremony && (

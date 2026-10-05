@@ -10,9 +10,21 @@
  * ⚠️ 两条硬约束（PRD §7.3 / §6 F8）不变：
  *   ① 起卦记录只存 date / hexagramId / changingLines —— 不存精确到分的时刻
  *   ② 不采集任何身份信息（无 uid 采集——uid 由平台匿名登录生成，仅作行级权限隔离）
+ *
+ * ── Day 19：接入身份层（src/identity.js）────────────────────────────────
+ * 启动流程改为「读本地 UID → 有就对账 → 无就生成并查可恢复数据」：
+ *   · 每次拿到云端 uid 都写回本地锚点（`rememberCloudUid`）
+ *   · `identityStatus()` 供界面判断要不要弹「是否恢复」的轻提示
+ *   · `restoreToCloud()` 是用户点确认后真正调用的**合并动作**
+ * ⭐ 身份判定与 RLS 的关系见 identity.js 顶部注释：本地 UID 是**对账锚点**，
+ *    请求一律走平台会话 —— 客户端伪造的 uid 过不了 RLS，别去试。
  */
 
 import cloudbase from '@cloudbase/js-sdk'
+import {
+  ensureLocalUid, rememberCloudUid, identityState,
+  markDeclined, clearDeclined,
+} from './identity.js'
 
 const K_RECORDS = 'yijing.records.v1'
 const K_FAVORITES = 'yijing.favorites.v1'
@@ -93,6 +105,10 @@ const cloudRead = { via: 'none', at: 0, records: 0, favorites: 0, detail: '' }
  *    这是**用户确认**的动作，不能替他做。 */
 let orphanCheck = { done: false, localCount: 0, cloudCount: 0, broken: false }
 
+/* Day 19：身份状态缓存（判定的结果，供界面读；不重复算）。
+   声明必须在 judgeOrphan 之前 —— 那里会写它。 */
+let identity = identityState({})
+
 /**
  * 调 Day 17 的读接口（GET /api/records、GET /api/favorites）。
  *
@@ -164,6 +180,20 @@ function cloudReady() {
 function notifySynced() {
   try {
     window.dispatchEvent(new CustomEvent('yijing:cloud-synced'))
+  } catch {
+    /* 忽略 */
+  }
+}
+
+/**
+ * 身份判定完成后通知界面（Day 19）。
+ * ⚠️ 必须**单独**派一个事件：恢复动作跑完后 `judgeOrphan` 重算的身份状态变了，
+ *    但那一次可能**没有新数据合并**（记录本来就在本地），所以 `notifySynced` 不一定触发。
+ *    Day 18 的记录页面板就是这么栽的：只等 cloud-synced，面板永远停在旧状态。
+ */
+function notifyIdentity() {
+  try {
+    window.dispatchEvent(new CustomEvent('yijing:identity-resolved'))
   } catch {
     /* 忽略 */
   }
@@ -319,7 +349,57 @@ function judgeOrphan(failed) {
     done: true, failed: !!failed,
     localCount, cloudCount, broken,
   }
+  // 身份层共用同一组数字 —— 不另起一套判据，避免两处判断打架
+  identity = identityState({
+    cloudUid: cloud.uid,
+    localCounts: {
+      records: localCount,
+      favorites: read(K_FAVORITES, []).length,
+      rounds: read(K_QUIZ, []).length,
+    },
+    cloudReadOk: !failed && cloudRead.via !== 'none',
+    cloudRecordCount: cloudCount,
+  })
+  if (identity.status === 'fresh' && cloud.uid) rememberCloudUid(cloud.uid)
   return orphanCheck
+}
+
+/**
+ * 身份状态（启动流程的判据给界面看）。
+ * @returns {{status:'fresh'|'recoverable'|'checking', localUid:string, cloudUid:string|null, localTotal:number, cloudTotal:number}}
+ */
+export function identityStatus() {
+  return { ...identity }
+}
+
+/**
+ * 用户确认后调用：把本机数据合并到**当前**身份（流程图里「调用后端合并接口」那一步）。
+ *
+ * ⚠️ 与 Day 18 的 `rebindLocalToCloud()` 的区别：
+ *   · 那个是**记录页**里「重绑」按钮调的，用户已经知道断链了；
+ *   · 这个是**启动轻提示**「是否恢复」调的，还会先把锚点认下（`rememberCloudUid`），
+ *     免得恢复完下一帧又判成 uid 不一致再弹一次。
+ * 两者底层都是「逐条 await 上推 + 核对返回值」，失败绝不报假成功。
+ *
+ * @returns {Promise<{records:number, favorites:number, failedRecords:number, failedFavorites:number}>}
+ */
+export async function restoreToCloud() {
+  const r = await rebindLocalToCloud()
+  const bad = r.failedRecords + r.failedFavorites
+  if (bad === 0 && cloud.uid) {
+    rememberCloudUid(cloud.uid)  // 认下新身份，下帧就不会再提示
+    clearDeclined()
+  }
+  notifyIdentity()
+  return r
+}
+
+/** 用户点「暂不处理」：本机记住「这个 uid 我不恢复了」，避免反复打扰。
+ *  ⚠️ 换设备后是另一个 uid，所以「暂不处理」不会永久失效 —— 这是刻意的。 */
+export function declineRestore() {
+  if (cloud.uid) markDeclined(cloud.uid)
+  identity = { ...identity, status: 'fresh' }
+  notifyIdentity()
 }
 
 /**
@@ -466,11 +546,18 @@ const pushProgress = () =>
     )
   })
 
-/* 启动即后台拉取（不 await，不阻塞首屏） */
+/* 启动流程（Day 19）：先读/建本地 UID 锚点，再后台拉云端做对账。
+ *
+ * 顺序很重要：**先确保本地锚点存在**，再去拿云端 uid。
+ * 反过来的话，新用户首次打开时本地还没锚点，judgeOrphan 会拿空值去比对，
+ * 判不出「可恢复」——而那正是最需要提示的场景（清过站点数据的老用户）。
+ */
 if (typeof window !== 'undefined') {
+  // 流程图第一步：读取本地存储的 UID；没有就生成并存本地
+  const boot = ensureLocalUid()
   pullAndMerge().then(
-    () => judgeOrphan(false),
-    () => judgeOrphan(true)   // 失败也要标记 done，否则提示条永远不出现
+    () => { judgeOrphan(false); notifyIdentity() },
+    () => { judgeOrphan(true); notifyIdentity() }  // 失败也要标记，否则提示永远不出现
   )
   try {
     window.__cloudDiag = () => ({ uid: cloud.uid, lastError: cloud.lastError, ready: !!cloud.ready })
@@ -481,6 +568,11 @@ if (typeof window !== 'undefined') {
     // 调试出口：断链判定状态（排查「二次打开记录清零」用）
     window.__orphan = () => orphanStatus()
     window.__rebind = () => rebindLocalToCloud()
+    // 调试出口：身份状态（Day 19 启动流程用）
+    window.__identity = () => identityStatus()
+    // 调试出口：强制重判一次（恢复动作跑完要刷新提示状态）
+    window.__rejudge = () => { judgeOrphan(false); return identityStatus() }
+    void boot
   } catch {
     /* 忽略 */
   }
