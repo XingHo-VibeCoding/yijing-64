@@ -39,12 +39,17 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
      而不是只写在代码里。via=api 表示走了云函数读接口，rdb 表示已回退直连。 */
   const [cloud, setCloud] = useState(() => store.cloudReadStatus())
   const [busy, setBusy] = useState(false)
+  /* uid 断链：本地有记录、但当前 uid 云端一条也没有（换浏览器 / 清了站点数据 / 无痕）
+     —— 这时页面看着像「记录被清零」。**只在确迹象象时出现，且要用户确认才重绑。 */
+  const [orphan, setOrphan] = useState(() => store.orphanStatus())
+  const [rebound, setRebound] = useState('')
 
   const readCloud = useCallback(async () => {
     setBusy(true)
     try {
       await store.refreshFromCloud()
       setCloud(store.cloudReadStatus())
+      setOrphan(store.orphanStatus())
     } catch (e) {
       setCloud({ ...store.cloudReadStatus(), detail: '读取失败：' + ((e && e.message) || '未知错误') })
     } finally {
@@ -52,10 +57,44 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
     }
   }, [])
 
-  // 页面打开时补一次状态（启动即拉取是异步的，首帧可能还没读回来）
+  /* 用户确认后重绑：把本地记录 / 收藏重新推到当前 uid 下 */
+  const doRebind = useCallback(async () => {
+    setBusy(true)
+    try {
+      const r = await store.rebindLocalToCloud()
+      const bad = (r.failedRecords || 0) + (r.failedFavorites || 0)
+      setRebound(
+        (bad > 0 ? '部分完成（' + bad + ' 条没写上云）' : '已重新备份')
+        + '：记录 ' + r.records + ' 条 · 收藏 ' + r.favorites + ' 条'
+      )
+      setCloud(store.cloudReadStatus())
+      setOrphan(store.orphanStatus())
+    } catch (e) {
+      setRebound('重绑失败：' + ((e && e.message) || '未知错误'))
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  /* 云端状态是**异步**拉回来的，首帧一定读不到 —— 所以这里不能只读一次：
+   *   ① 订阅 `yijing:cloud-synced`（storage.js 每次合并成功都会派发）；
+   *   ② 再加一条兜底轮询（合并成功但**没有新数据**时不会派发事件，只靠轮询）。
+   * 两条合起来保证「拉取刚完成」的那一刻，界面一定会更新一次。
+   * ⚠️ 之前两个面板（云端读取 / uid 断链）都栽在这里：一次性读取 → 永远停在「读取中」。 */
   useEffect(() => {
-    const t = setTimeout(() => setCloud(store.cloudReadStatus()), 1500)
-    return () => clearTimeout(t)
+    const sync = () => {
+      setCloud(store.cloudReadStatus())
+      setOrphan(store.orphanStatus())
+    }
+    window.addEventListener('yijing:cloud-synced', sync)
+    sync()                                                    // 立即读一次（已拉完的情形）
+    const t1 = setTimeout(sync, 1500)                         // 兜底：首帧之后
+    const t2 = setTimeout(sync, 4000)                         // 兜底：网络慢的情形
+    const t3 = setTimeout(sync, 9000)                         // 兜底：更慢的情形
+    return () => {
+      window.removeEventListener('yijing:cloud-synced', sync)
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+    }
   }, [])
   // ⚠️ 测验进度（F3）也算「有记录」—— 否则只测过一轮、还没起过卦时，
   //    这个页面会显示成空的，「清空我的记录」按钮就不出现，进度再也清不掉
@@ -261,6 +300,36 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
           </p>
         )}
       </section>
+
+      {/* uid 断链提示：本地有记录、但当前 uid 云端一条也没有 → 看着像「记录被清零」。
+          只在确迹象象时出现；**要不要重绑由用户决定**，绝不自动改他的数据。 */}
+      {orphan.done && orphan.broken && !rebound && (
+        <section className="rec-orphan" role="alert">
+          <p className="rec-orphan-text">
+            你在本机有 <b>{orphan.localCount}</b> 条起卦记录，但云端一条也没有 ——
+            多半是换了浏览器、清了站点数据，或用无痕模式打开过。
+            <b>本机记录没有丢</b>，只是没备份到云上。要现在重新备份吗？
+          </p>
+          <div className="rec-orphan-row">
+            <button type="button" className="rec-btn" onClick={doRebind} disabled={busy}>
+              {busy ? '处理中…' : '重新备份到云端'}
+            </button>
+            <button type="button" className="rec-btn rec-btn-ghost" onClick={() => setRebound('已跳过')}>
+              暂不处理
+            </button>
+          </div>
+        </section>
+      )}
+      {orphan.done && orphan.failed && !rebound && (
+        <p className="rec-orphan-msg" role="status">
+          云端这次没连上（不影响本机记录）。网络恢复后点上面的「重新读取」即可。
+        </p>
+      )}
+      {rebound && (
+        <p className="rec-orphan-msg" role="status">
+          {rebound}
+        </p>
+      )}
 
       {/* 云端读取（Day 17）：本项目的记录与收藏由云函数读接口从数据库读出，
           身份判定在服务端与 RLS。这里把接口地址、读到的条数与读取时间显示出来 ——

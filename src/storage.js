@@ -75,6 +75,24 @@ const cloud = { app: null, auth: null, db: null, uid: null, ready: null, lastErr
 /* 最近一次「读」走的是哪条路、拿到多少条 —— 记录页要显示它，用户才看得见数据真的来自接口 */
 const cloudRead = { via: 'none', at: 0, records: 0, favorites: 0, detail: '' }
 
+/* ── uid 断链检测（Day 18 排查「二次打开记录清零」的结论）──────────
+ *
+ * 现象：本地记录还在，但**云端一条也没有** —— 页面看着像「记录被清零」。
+ * 根因：匿名 uid 变了（无痕模式 / 清站点数据 / 换浏览器 / 隐私策略拦截存储），
+ *      而云端按 uid 隔离，新 uid 自然查不到旧 uid 的行。
+ *      代码注释里「匿名身份持久在本机」这句**并不保证** —— SDK 会话写进
+ *      localStorage 的 `credentials_*`，与本项目的 `yijing.*` 是两套独立存储，
+ *      任何一侧失效都会断链。
+ *
+ * 判据（两个数就够，不猜）：
+ *   本地有记录 **且** 本次云端读到 0 条 **且** 已经完成过一次云端读取。
+ * 满足即视为「可能断了链」，交给界面提示用户确认 —— **绝不自动重绑**。
+ *
+ * ⚠️ 为什么不能自动重绑：那等于把「本机的数据」写进「当前的 uid」，
+ *    一旦 uid 其实没变（只是云端写入失败），就会把用户数据重复上传。
+ *    这是**用户确认**的动作，不能替他做。 */
+let orphanCheck = { done: false, localCount: 0, cloudCount: 0, broken: false }
+
 /**
  * 调 Day 17 的读接口（GET /api/records、GET /api/favorites）。
  *
@@ -288,6 +306,100 @@ async function pullAndMerge() {
   }
 }
 
+/** 断链判定：本地有记录 + 云端读到 0 条 → 提示用户确认是否重绑。
+ *  必须在所有表都拉完之后调用（那时 cloudRead.records 才是完整值）。*/
+function judgeOrphan(failed) {
+  const localCount = read(K_RECORDS, []).length
+  const cloudCount = cloudRead.records
+  // 只在「确实读到过云端」时才判 broken。
+  // ⚠️ 拉取失败（failed=true / via 仍为 'none'）时**不能**判 —— 那时云端条数是未知，
+  //    不是 0；否则网络一抖就误报「断链」，反而教用户不信任这个提示。
+  const broken = !failed && cloudRead.via !== 'none' && localCount > 0 && cloudCount === 0
+  orphanCheck = {
+    done: true, failed: !!failed,
+    localCount, cloudCount, broken,
+  }
+  return orphanCheck
+}
+
+/**
+ * 用户确认后：把**本地已有的**记录 / 收藏重新推到当前 uid 下。
+ *
+ * ⚠️ 这是一次「显式的数据迁移」，只在用户点确认后执行。
+ *   · 用 upsert（onConflict）逐条推，**同一天不会重复**；
+ *   · 推完不清本地（本地本来就是这些数据的源头）；
+ *   · 失败静默（本地已生效，用户可再点一次）。
+ *
+ * @returns {Promise<{records:number, favorites:number}>} 各推了多少条
+ */
+export async function rebindLocalToCloud() {
+  const c = await cloudReady()
+  if (!c || !c.uid) throw new Error('云端未就绪，请稍后再试')
+  const recs = loadRecords()
+  const favs = loadFavorites()
+  let nR = 0
+  let nF = 0
+  let failR = 0
+  let failF = 0
+
+  // ⚠️ **逐条 await 并检查返回** —— 早先用 `pushRecord()`（内部是 fire-and-forget 的
+  //    静默失败）逐条调用，然后无条件报「已重新备份 N 条」。实测那会**报假成功**：
+  //    界面写「已备份 2 条」，而数据库里 0 行 —— 因为推送早就失败了，只是没人看。
+  for (const r of recs) {
+    try {
+      const { error } = await withTimeout(
+        c.db.from('divination_records').upsert(
+          { uid: c.uid, date: r.date, hexagram_id: r.hexagramId, changing_lines: normChanging(r.changingLines) },
+          { onConflict: 'uid,date' }
+        )
+      )
+      if (error) failR += 1
+      else nR += 1
+    } catch (e) {
+      failR += 1
+    }
+  }
+  for (const f of favs) {
+    try {
+      const { error } = await withTimeout(
+        c.db.from('favorites').upsert(
+          { uid: c.uid, hexagram_id: f.hexagramId, created_at: new Date().toISOString() },
+          { onConflict: 'uid,hexagram_id' }
+        )
+      )
+      if (error) failF += 1
+      else nF += 1
+    } catch (e) {
+      failF += 1
+    }
+  }
+
+  // 重读一次，让界面上的条数立刻反映**真实结果**（而不是我们自己报的数）。
+  // ⚠️ 绝不能为了让判定通过而改 `cloudRead.records` —— 那是**伪造依据**，
+  //    下次判「有没有断链」就会基于假数字，提示条将失去意义。
+  await pullAndMerge().catch(() => {})
+  judgeOrphan(false)
+
+  const okCount = nR + nF
+  if (okCount === 0 && (failR + failF) > 0) {
+    throw new Error('没能写入云端（网络或权限问题）。本机记录仍在，可稍后再试。')
+  }
+  return {
+    records: nR, favorites: nF, failedRecords: failR, failedFavorites: failF,
+  }
+}
+
+/** 断链状态（记录页用）。@returns {{done:boolean, localCount:number, cloudCount:number, broken:boolean}} */
+export function orphanStatus() {
+  return { ...orphanCheck, uid: cloud.uid }
+}
+
+/** 清掉「已跳过 / 已处理」的标记，让提示可以再次出现（用户点过「暂不处理」后用） */
+
+export function resetOrphanNotice() {
+  orphanCheck = { ...orphanCheck, done: false }
+}
+
 /* 写入后静默上推（§11 E2：失败不告知，本地已成功；最后错误存 cloud.lastError 供诊断） */
 function pushSilent(fn) {
   cloudReady()
@@ -356,13 +468,19 @@ const pushProgress = () =>
 
 /* 启动即后台拉取（不 await，不阻塞首屏） */
 if (typeof window !== 'undefined') {
-  pullAndMerge()
+  pullAndMerge().then(
+    () => judgeOrphan(false),
+    () => judgeOrphan(true)   // 失败也要标记 done，否则提示条永远不出现
+  )
   try {
     window.__cloudDiag = () => ({ uid: cloud.uid, lastError: cloud.lastError, ready: !!cloud.ready })
     // 调试出口：绕过「本地为准」的合并，直接看接口返回什么（验证「改库数据 → 接口跟着变」）
     window.__apiRead = (name, params) => debugApiRead(name, params)
     // 调试出口：带真实会话发 POST（Day 18 写入接口验证）
     window.__apiWrite = (name, body) => debugApiWrite(name, body)
+    // 调试出口：断链判定状态（排查「二次打开记录清零」用）
+    window.__orphan = () => orphanStatus()
+    window.__rebind = () => rebindLocalToCloud()
   } catch {
     /* 忽略 */
   }
@@ -381,7 +499,13 @@ export function cloudReadStatus() {
  * @returns {Promise<{via:string, records:number, favorites:number}>}
  */
 export async function refreshFromCloud() {
-  await pullAndMerge()
+  let failed = false
+  try {
+    await pullAndMerge()
+  } catch (e) {
+    failed = true
+  }
+  judgeOrphan(failed)
   return { via: cloudRead.via, records: cloudRead.records, favorites: cloudRead.favorites }
 }
 

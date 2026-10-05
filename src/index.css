@@ -1311,6 +1311,19 @@ body {
 .rec-backup-note { margin: 0 0 12px; font-size: 13px; line-height: 1.7; color: #4b463d; }
 .rec-backup-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
 
+/* ── uid 断链提示（Day 18 排查结论）：浅底 + 深字 + 左侧暖色边，不靠发光 ── */
+.rec-orphan {
+  margin: 18px 0 0; padding: 14px 18px;
+  background: rgba(255, 250, 240, .72);
+  border: 1px solid rgba(160, 110, 40, .45);
+  border-left: 4px solid rgba(160, 110, 40, .8);
+  border-radius: 8px;
+}
+.rec-orphan-text { margin: 0; font-size: 13.5px; line-height: 1.8; color: #4b463d; }
+.rec-orphan-text b { color: #3a2c18; }
+.rec-orphan-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.rec-orphan-msg { margin: 14px 0 0; font-size: 13px; line-height: 1.75; color: #4b463d; }
+
 /* ── 云端读取面板（Day 17）：接口地址与读到的条数在页面上可见 ── */
 .rec-cloud {
   margin: 18px 0 0; padding: 16px 20px;
