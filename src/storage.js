@@ -119,6 +119,11 @@ let identity = identityState({})
  * @param {'records'|'favorites'} name
  * @param {{limit?:number, before?:string}} [params] 值一律 encodeURIComponent，不拼 SQL
  * @returns {Promise<{items:Array, meta:Object}>} 契约形状；非 2xx 或 ok:false 一律抛错（上层静默回退）
+ * @throws {Error} 抛出的错误对象**额外挂** `status` / `code` / `body`（Day 19 补）——
+ *         业务调用方仍按「抛错 → 静默回退」处理，**行为不变**；但调试出口
+ *         `debugApiRead` 需要拿到真实状态码才能验错误分支。此前这里只抛 message，
+ *         把 status 丢了，于是 `debugApiRead` 对 422 也返回 `status:200 / ok:true`
+ *         —— 用它验错误码会得到**假通过**（Day 19 实测踩到）。
  */
 async function apiGet(name, params = {}) {
   if (!API_BASE) throw new Error('未配置 VITE_API_BASE')
@@ -128,7 +133,15 @@ async function apiGet(name, params = {}) {
   if (!accessToken) throw new Error('取不到访问凭证')
 
   const qs = new URLSearchParams()
-  if (Number.isInteger(params.limit)) qs.set('limit', String(params.limit))
+  // ⚠️ 只过滤「空值」，**不过滤类型**（Day 19 修）。
+  //   原来写的是 `Number.isInteger(params.limit)` —— 于是 `'abc'`、`'9999'` 这类
+  //   字符串会被**静默丢掉**，请求根本没带 limit，接口自然回 200。
+  //   后果实测过：用调试出口验「limit 非数字 → 422」时，这条拿到的是 200，
+  //   看起来像接口没做校验，其实是**参数没发出去**。
+  //   正确分工：参数格式由**接口层**判（契约 422 规则在那边），本层只负责「有没有给」。
+  if (params.limit !== undefined && params.limit !== null && params.limit !== '') {
+    qs.set('limit', String(params.limit))
+  }
   if (params.before) qs.set('before', String(params.before))
   const url = `${API_BASE}/api/${name}${qs.toString() ? '?' + qs.toString() : ''}`
 
@@ -136,7 +149,12 @@ async function apiGet(name, params = {}) {
   const body = await res.json().catch(() => null)
   if (!res.ok || !body || body.ok !== true) {
     const msg = (body && body.error && body.error.message) || `HTTP ${res.status}`
-    throw new Error(msg)
+    const err = new Error(msg)
+    // ⚠️ 保留真实状态码与契约错误码 —— 调试出口要靠它们验错误分支（Day 19）
+    err.status = res.status
+    err.code = (body && body.error && body.error.code) || ''
+    err.body = body
+    throw err
   }
   return { items: body.items || [], meta: body.meta || {} }
 }
@@ -609,11 +627,24 @@ export async function refreshFromCloud() {
  * 页面**故意**不变 —— 要证明接口本身跟着变，就得绕过合并直接看接口返回。
  *
  * ⚠️ token 只在本机内存里用一次，不写 localStorage、不打日志、不外传。
- * @returns {Promise<{status:number, body:any}>}
+ * ⚠️ 错误分支也**原样返回**（Day 19 修）：早先这里写的是
+ *    `const r = await apiGet(...); return { status: 200, body: { ok: true, ... } }`
+ *    —— `apiGet` 一遇非 2xx 就抛错，且异常里**没带 status**，
+ *    于是这个出口对 422 也返回 `status:200 / ok:true`。
+ *    后果实测过：拿它验错误码，第一版回归页把 4 条 422 全显示成 PASS —— **假通过**。
+ *    现在按 `debugApiWrite` 的同一口径：真实 status + 原始 body，并附 `ok` 便于断言。
+ * @returns {Promise<{status:number, body:any, ok:boolean}>}
  */
 export async function debugApiRead(name, params = {}) {
-  const r = await apiGet(name, params)
-  return { status: 200, body: { ok: true, items: r.items, meta: r.meta } }
+  try {
+    const r = await apiGet(name, params)
+    return { status: 200, ok: true, body: { ok: true, items: r.items, meta: r.meta } }
+  } catch (e) {
+    // apiGet 现在把 status / code / body 挂在异常上（见其 @throws）
+    const status = Number((e && e.status)) || 0
+    const body = (e && e.body) || { ok: false, error: { code: (e && e.code) || '', message: (e && e.message) || '未知错误' } }
+    return { status, ok: false, body, error: String((e && e.message) || e) }
+  }
 }
 
 /**
@@ -621,7 +652,8 @@ export async function debugApiRead(name, params = {}) {
  * ⚠️ 只在浏览器控制台 / 自动化里手动调用，不参与任何业务路径。
  * @param {'favorites'} name
  * @param {object} body 请求体（如 { hexagramId: 12 }）
- * @returns {Promise<{status:number, body:any}>} 原样返回接口响应，便于核对状态码与信封
+ * @returns {Promise<{status:number, ok:boolean, body:any}>} 原样返回接口响应（含真实状态码与信封），
+ *         `ok` 取自响应体的 `ok` 字段，便于断言时不必再判状态码
  */
 export async function debugApiWrite(name, body) {
   if (!API_BASE) throw new Error('未配置 VITE_API_BASE')
@@ -637,7 +669,8 @@ export async function debugApiWrite(name, body) {
     })
   )
   const parsed = await res.json().catch(() => null)
-  return { status: res.status, body: parsed }
+  // ⚠️ 与 debugApiRead 同一口径：不伪造 ok，按响应体的真实字段给（Day 19）
+  return { status: res.status, ok: !!(parsed && parsed.ok === true), body: parsed }
 }
 
 
