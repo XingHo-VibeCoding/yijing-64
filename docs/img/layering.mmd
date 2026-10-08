@@ -1,0 +1,44 @@
+flowchart TB
+    subgraph CLIENT["浏览器 / 静态托管"]
+        FE["React 前端<br/>起卦 · 解读 · 记录页"]
+    end
+
+    subgraph GW["HTTP 访问服务（网关）"]
+        R["路径路由<br/>/api/*"]
+    end
+
+    subgraph FN["云函数 api（Node）"]
+        direction TB
+        IDX["index.js · 接口层<br/>接请求 → 调函数 → 返响应<br/>路由分派 · 身份判定 · 参数校验 · 状态码映射"]
+        LIB["lib/ · 共享工具<br/>http.js 响应信封与 CORS<br/>request.js 网关事件解析<br/>identity.js uid 与业务日"]
+        REPO["repositories/ · 数据访问层<br/>recordsRepository.js 起卦记录表<br/>favoritesRepository.js 收藏表"]
+        IDX --> LIB
+        IDX --> REPO
+    end
+
+    subgraph DB["CloudBase PostgreSQL"]
+        T1[("divination_records")]
+        T2[("favorites")]
+        T3[("study_progress")]
+        T4[("study_rounds")]
+        T5[("gilded")]
+    end
+
+    FE -->|"Authorization: Bearer JWT"| R
+    R --> IDX
+    REPO -->|"PostgREST REST 风格<br/>同一 token 原样透传"| T1
+    REPO --> T2
+    REPO -.->|"study 三表目前前端直连<br/>未走本函数"| T3
+    REPO -.-> T4
+    REPO -.-> T5
+
+    classDef iface fill:#E6F1FB,stroke:#185FA5,stroke-width:1px,color:#0C447C
+    classDef lib fill:#EEEDFE,stroke:#534AB7,stroke-width:1px,color:#3C3489
+    classDef repo fill:#E1F5EE,stroke:#0F6E56,stroke-width:1px,color:#085041
+    classDef store fill:#FAEEDA,stroke:#854F0B,stroke-width:1px,color:#633806
+    classDef edge fill:#F1EFE8,stroke:#5F5E5A,stroke-width:1px,color:#444441
+    class IDX iface
+    class LIB lib
+    class REPO repo
+    class T1,T2,T3,T4,T5 store
+    class FE,R edge
