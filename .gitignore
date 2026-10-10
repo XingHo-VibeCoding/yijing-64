@@ -60,3 +60,5 @@ build/
 .DS_Store
 Thumbs.db
 desktop.ini
+# SSR 验证脚本的临时产物（脚本自己会清，这里兜底）
+.workbuddy/verify-ssr-out/
