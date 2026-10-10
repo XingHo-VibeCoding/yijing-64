@@ -1610,3 +1610,54 @@ body {
   font-size: 12px; line-height: 1.7; color: #6f5330;
 }
 .rec-check-note strong { color: #5c4425; }
+
+/* ============================================================
+   Day 21 · 第三层「想跟你说的话」三段式
+   处境 → 共鸣 → 落点。原先只有一段纯现代口语，现在三段各有分工。
+   设计意图：一段一个标签，读者一眼知道这段是「说卦」还是「说人」。
+   浅底深墨（AGENTS R3），标签用**底色 + 深字**区分，不靠发光。
+   ============================================================ */
+.cr-talk {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.cr-talk p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.95;
+  color: #3a2c18;
+}
+/* 标签：小字、竖向留白、像一枚印章的边 —— 提示这一段的性质 */
+.cr-talk-tag {
+  display: inline-block;
+  margin-right: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: .04em;
+  color: #6f5330;
+  background: rgba(160, 110, 40, .12);
+  border: 1px solid rgba(160, 110, 40, .32);
+  border-radius: 4px;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+/* 处境：文言腔，略微疏排 —— 它讲的是卦 */
+.cr-talk-situ {
+  letter-spacing: .02em;
+}
+/* 共鸣：现代口语 —— 它讲的是人 */
+.cr-talk-reso { color: #4b463d; }
+/* 落点：最重的一句，底部收一道暖色线 */
+.cr-talk-land {
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(160, 110, 40, .28);
+}
+.cr-talk-land b { color: #5c4425; }
+
+@media (max-width: 420px) {
+  .cr-talk p { font-size: 14.5px; line-height: 1.9; }
+  .cr-talk-tag { margin-right: 6px; padding: 1px 6px; font-size: 11.5px; }
+}

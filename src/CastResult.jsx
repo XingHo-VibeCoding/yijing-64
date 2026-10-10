@@ -1,21 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import yaoData from '../data/64卦-爻辞.json'
 import SourceTag from './SourceTag.jsx'
+import { buildThirdLayer, situationLine, resonanceLine, landingLine } from './reading/thirdLayer.js'
 
 /**
  * 三层解读 · 第三层「想跟你说的话」
  *
  * 落点由卦的属性固定决定（PRD §4.1.3 吉凶方向表）：
- *   吉 → 戒骄躁    凶 → 劝慰（运随时变，成事在人）    平 → 中性陈述
+ *   吉 → 戒骄躁凶 → 劝慰（运随时变，成事在人）    平 → 中性陈述
  *
  * ⚠️ 这三段是**本项目的理解**，不是《周易》原文，因此展示时必须带「非原文」标注。
  * ⚠️ 不得出现「你会……」「建议你……」「宜 / 不宜」这类预测性与建议性表述。
+ *
+ * ⭐ 文案的写法与依据见 `src/reading/thirdLayer.js` 头部注释：
+ *   句法取巴纳姆效应（福勒 1948）的成对结构，分寸取易经文体（实测 64 卦）。
+ *   **只取句法，不取其欺骗性** —— 共鸣来自「描述处境」，不来自假装知道用户的私事。
  */
-const THIRD_LAYER = {
-  吉: '此刻是顺的。但《易》讲得最多的恰恰是：顺的时候最容易走岔。把眼下这份顺当成油门，而不是终点。',
-  凶: '眼下是难的。但六十四卦排下来，没有一卦能一直难下去——运随时变，成事在人。',
-  平: '谈不上吉也谈不上凶，它只是把这件事实话实说。继续观察，不必急着下结论。',
-}
+/* ⚠️ 旧的 THIRD_LAYER 已删（单句现代口语，无处境、无共鸣）。
+   第三层文案改由 `src/reading/thirdLayer.js` 生成 —— 三段：处境 / 共鸣 / 落点。
+   理由与写法见该文件头部注释（巴纳姆效应的句法 + 易经文体的分寸）。 */
 
 const FORTUNE_NOTE = {
   吉: '《易》的吉，多半是提醒而不是许诺。',
@@ -34,6 +37,12 @@ function structurePhrase(upperNature, lowerNature) {
  * 结构：卦头 → 两层交互键 → 三层解读（展开后）→ 边界声明 → 去读全卦
  * 卦象图不在本组件里：它由 CastingAnimation 的 SVG 舞台渲染（这样才能吃到那段水墨动画）。
  */
+/** 读地址栏参数。SSR / 无 window 环境一律返回 null（不是浏览器就不该碰 location）。 */
+function queryFlag(name) {
+  if (typeof window === 'undefined') return null
+  return new URLSearchParams(window.location.search).get(name)
+}
+
 export default function CastResult({
   result,
   changingLines = [],
@@ -46,7 +55,13 @@ export default function CastResult({
   onEnterList,
   onEnterDetail,
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(() =>
+    // 地址栏给 `?openReading=1` 时**默认就展开解读**。
+    // 用途：① 截图与验收不必跟动画/点击较劲（无头环境点不了按钮）；
+    //     ② 同伴之间可以直接分享「这一卦解读长什么样」的链接。
+    // ⚠️ 默认仍是收起 —— 不改变正常用户进页面的行为。
+    queryFlag('openReading') === '1'
+  )
   const boxRef = useRef(null)
   const readRef = useRef(null)
 
@@ -67,6 +82,17 @@ export default function CastResult({
     .filter((x) => x.yao)
 
   const fortune = result.fortune || '平'
+
+  /* 第三层三段：处境（由卦象推出）／ 共鸣（福勒式通用句）／ 落点（吉凶固定方向）
+     ⚠️ 必须放在 `fortune` 声明**之后** —— 曾在它前面用，实测被 bundler 的
+        求值顺序掩盖、到 SSR 才炸（`Cannot access 'fortune' before initialization`）。 */
+  const third = buildThirdLayer(result, fortune)
+  const situation = third.situation
+  const resonance = third.resonance
+  /* 凶卦落点里的「运随时变，成事在人」是 PRD 指定的固定句，保留加粗 */
+  const landingNode = third.landing.split('**').map((seg, i) =>
+    i % 2 === 1 ? <b key={i}>{seg}</b> : <span key={i}>{seg}</span>
+  )
 
   return (
     <div className="cast-result" ref={boxRef}>
@@ -180,18 +206,40 @@ export default function CastResult({
               />
             </section>
 
-            {/* 第三层 · 想跟你说的话 */}
+            {/* 第三层 · 想跟你说的话
+                三段：处境（由卦象推出）→ 共鸣（福勒式通用句）→ 落点（吉凶固定）。
+                依据见 reading/thirdLayer.js 头部注释。 */}
             <section className="cr-layer">
               <h2 className="cr-layer-title">
                 <span className="cr-layer-no">第三层</span>想跟你说的话
               </h2>
-              <p className="cr-layer-body cr-talk">{THIRD_LAYER[fortune]}</p>
+
+              <div className="cr-talk">
+                <p className="cr-talk-situ">
+                  <span className="cr-talk-tag">此刻的处境</span>
+                  {situation}
+                </p>
+                {resonance ? (
+                  <p className="cr-talk-reso">
+                    <span className="cr-talk-tag">或许你也是这样</span>
+                    {resonance}
+                  </p>
+                ) : null}
+                <p className="cr-talk-land">
+                  <span className="cr-talk-tag">《易》放在这里，是想提醒</span>
+                  {landingNode}
+                </p>
+              </div>
+
               {result.fortuneBasis?.length ? (
                 <p className="cr-basis">
                   这一卦判为「{fortune}」，依据是卦辞里的「{result.fortuneBasis.join('」「')}」。
                 </p>
               ) : null}
-              <SourceTag kind="ours" note="上面这段是本项目的理解，不是《周易》里的话" />
+              <SourceTag
+                kind="ours"
+                note="处境由卦象推出，共鸣句取「先扬后抑」的通用句法 —— 都是本项目的理解，不是《周易》里的话"
+              />
             </section>
 
             {/* ── 去读全卦：把好奇导向学习（把点击坐标带给转场，涟漪从按钮上冒出来） ── */}

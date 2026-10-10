@@ -36,19 +36,36 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const T_HEX_IN_START = T_HOLD_END + T.inkOut * 0.5     // 墨散到一半，卦象才开始显
 const T_HEX_IN_END = T_OUT_END + T.reveal * 0.55       // 略早于结果页出现，收尾更顺
 
-/** 便于逐帧验证：URL 加 ?castSpeed=0.2 即以 1/5 速度播放 */
-const SPEED = (() => {
-  if (typeof window === 'undefined') return 1
-  const v = parseFloat(new URLSearchParams(window.location.search).get('castSpeed'))
-  return Number.isFinite(v) && v > 0 ? v : 1
-})()
+/** 便于逐帧验证：URL 加 ?castSpeed=0.2 即以 1/5 速度播放
+ *
+ * ⚠️ Day 21 修：原来 `SPEED` / `FREEZE` 是**模块顶层**的 IIFE，立即求值。
+ *    打包后 `?castSpeed=6` 会让整个 React 树挂不上（白屏），控制台报
+ *    `Uncaught ReferenceError: Cannot access before initialization` —— 实测是
+ *    **无参数正常、一加这个参数就崩**，说明是模块顶层求值顺序与打包器内
+ *    循环引用互相打乱，而不是这段逻辑本身写错。
+ *    改成**惰性读取**：把结果挂到 globalThis 缓存，用到时才算，
+ *    与模块求值顺序彻底解耦。行为不变 —— 同一地址栏参数仍是同一速度。
+ */
+function readSpeed() {
+  if (globalThis.__yijingCastSpeed != null) return globalThis.__yijingCastSpeed
+  const v = typeof window === 'undefined'
+    ? NaN
+    : parseFloat(new URLSearchParams(window.location.search).get('castSpeed'))
+  const s = Number.isFinite(v) && v > 0 ? v : 1
+  globalThis.__yijingCastSpeed = s
+  return s
+}
 
 /** 调试用：?castFreeze=9500 把动画定格在 9.5 秒处（墨仍在流动），用于逐帧核对 */
-const FREEZE = (() => {
-  if (typeof window === 'undefined') return null
-  const v = parseFloat(new URLSearchParams(window.location.search).get('castFreeze'))
-  return Number.isFinite(v) && v >= 0 ? v : null
-})()
+function readFreeze() {
+  if (globalThis.__yijingCastFreeze !== undefined) return globalThis.__yijingCastFreeze
+  const v = typeof window === 'undefined'
+    ? NaN
+    : parseFloat(new URLSearchParams(window.location.search).get('castFreeze'))
+  const f = Number.isFinite(v) && v >= 0 ? v : null
+  globalThis.__yijingCastFreeze = f
+  return f
+}
 
 /* ---------- 墨：点云叠出自然的墨斑（不规则边缘 + 浓淡层次） ---------- */
 /** 墨点纹理（带毛边）。转场动画 `InkTransition` 也用这一份 —— 保证两处的墨是同一种墨 */
@@ -310,6 +327,8 @@ export default function CastingAnimation({
     let doneAt = null                  // 进入 done（结果页出现）的时刻，用于放大卦象
 
     const loop = (now) => {
+      const FREEZE = readFreeze()
+      const SPEED = readSpeed()
       const el = FREEZE != null ? FREEZE : (now - start) * SPEED
       const w = window.innerWidth
       const h = window.innerHeight
@@ -372,7 +391,7 @@ export default function CastingAnimation({
       let fHex = 1                                      // 第二段里卦象自身的透明度
       const f = focusRef.current
       if (f && f.active) {
-        const ft = (now - f.start) * SPEED
+        const ft = (now - f.start) * readSpeed()
         if (ft < T.focusIn) {
           const p = clamp01(ft / T.focusIn)
           covFocus = easeInOutCubic(p)

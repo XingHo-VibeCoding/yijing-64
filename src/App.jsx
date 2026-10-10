@@ -63,6 +63,24 @@ const stripTones = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
  * （在传统模型里，条件于「至少一个变爻」时，变爻位置本就是均匀分布）。
  */
 function castOnce() {
+  // ⚠️ 调试定值：地址栏给 `?cast=<卦序>&chg=<爻位>` 时**跳过随机**，直接出指定卦。
+  //   用途：截图与验收需要「同一卦每次都一样」，而 `Math.random()` 做不到 ——
+  //   这不是测试专用开关，是把已有的调试参数体系补齐（与 ?castSpeed / ?castFreeze 同族）。
+  //   ⚠️ 优先级高于随机，且**只影响本次运行**，不影响正式用户的任何路径。
+  const sp = new URLSearchParams(window.location.search)
+  const forcedId = sp.get('cast')
+  const forcedChg = sp.get('chg')
+
+  if (forcedId) {
+    const n = Number(forcedId)
+    const hit = Number.isInteger(n) && n >= 1 && n <= 64 ? data.items[n - 1] : data.items[0]
+    const chg = forcedChg ? Number(forcedChg) : 0
+    return {
+      id: hit.id,
+      changing: Number.isInteger(chg) && chg >= 1 && chg <= 6 ? [chg] : [],
+    }
+  }
+
   const lines = Array.from({ length: 6 }, () => (Math.random() < 0.5 ? 1 : 0))
   const hit = data.items.find((h) => h.lines.join('') === lines.join('')) || data.items[0]
   const changing = Math.random() < P_HAS_CHANGING ? [1 + Math.floor(Math.random() * 6)] : []
@@ -155,6 +173,21 @@ export default function App() {
     setCasting({ ...c, archived })
     bump()
   }
+
+  /* 深链：地址栏带 `?cast=<卦序>` 时自动起一次卦（配合 `?castSpeed=` 与 `?openReading=1`）。
+   * 用途是**可分享某一卦的解读**与稳定截图 —— 此前截图每次都不一样，因为起卦用
+   * `Math.random()`，同一地址连拍两次得到两个卦，没法对比前后改动。
+   * ⚠️ 只在明确带参时触发；正常用户进页面仍是首页、需自己点「起一卦」。
+   * ⚠️ 自动起卦**会写入当日存档**（走的是同一条 archiveFirstOfToday），
+   *    与用户亲手点的效果一致 —— 不绕过任何业务规则。
+   */
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (!sp.has('cast')) return
+    if (casting || currentId !== null) return // 已经起过 / 已进详情，别重复触发
+    startCast()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const openDetail = (id, from = 'list') => {
     setBackTo(from)
