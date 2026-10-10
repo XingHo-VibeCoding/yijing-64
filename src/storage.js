@@ -648,6 +648,25 @@ export async function debugApiRead(name, params = {}) {
 }
 
 /**
+ * 检查台用：调一次 `GET /api/health`（Day 20）。
+ *
+ * ⚠️ **不需要会话** —— health 是契约里刻意的例外，不套 `{ok,items,meta}` 信封、
+ *    也不读数据库，所以直接裸 fetch，**不经过 `apiGet`**（那个函数要求真实 token）。
+ * ⭐ 返回真实 status 与 body，不伪造：健康检查的价值就在于「它说什么就是什么」。
+ *
+ * @returns {Promise<{status:number, ok:boolean, body:any, ms:number}>}
+ *          `ms` 是往返耗时，用来判断是「服务不可用」还是「服务慢」
+ */
+export async function debugHealth() {
+  if (!API_BASE) throw new Error('未配置 VITE_API_BASE')
+  const started = Date.now()
+  const res = await withTimeout(fetch(`${API_BASE}/api/health`))
+  const ms = Date.now() - started
+  const body = await res.json().catch(() => null)
+  return { status: res.status, ok: !!(body && body.ok === true), body, ms }
+}
+
+/**
  * 调试用：带当前会话的真实凭证发一次 POST（Day 18 验收「真实写入 + 读回」用）。
  * ⚠️ 只在浏览器控制台 / 自动化里手动调用，不参与任何业务路径。
  * @param {'favorites'} name

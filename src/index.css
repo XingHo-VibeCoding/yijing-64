@@ -1568,3 +1568,45 @@ body {
   .restore-notice { flex-direction: column; gap: 10px; padding: 12px 16px; }
   .restore-text { text-align: center; }
 }
+
+/* ============================================================
+   Day 20 · 检查台（Records 页「云端读取」面板内）
+   健康状态 / 写入测试入口 —— 都用既有能力，不新增后端行为。
+   配色沿用同一面板（浅底 + 深字），状态靠底色 + 边框区分，不靠发光。
+   ============================================================ */
+.rec-check {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px dashed rgba(90, 60, 28, .25);
+}
+.rec-check-row {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px 10px; margin-bottom: 8px;
+}
+.rec-check-label {
+  font-size: 13px; color: #3a2c18;
+  min-width: 4.5em; font-weight: 500;
+}
+.rec-check-input {
+  width: 68px; padding: 4px 8px;
+  font-size: 13px; font-family: inherit;
+  color: #3a2c18; background: #fff;
+  border: 1px solid rgba(90, 60, 28, .35);
+  border-radius: 6px;
+}
+.rec-check-input:focus-visible { outline: 2px solid rgba(111, 83, 48, .65); outline-offset: 1px; }
+.rec-btn-sm { padding: 4px 12px; font-size: 12.5px; }
+
+.rec-check-out {
+  font-size: 12.5px; line-height: 1.6;
+  margin: 0; word-break: break-all;
+}
+/* 状态：靠**底色 + 深字**，浅底不用发光（R3 同一条律） */
+.rec-check-out.is-ok { color: #27500a; }
+.rec-check-out.is-bad { color: #791f1f; }
+.rec-check-out.is-busy { color: #6f5330; }
+.rec-check-idle { font-size: 12.5px; color: #8a7a63; }
+.rec-check-note {
+  margin: 10px 0 0;
+  font-size: 12px; line-height: 1.7; color: #6f5330;
+}
+.rec-check-note strong { color: #5c4425; }

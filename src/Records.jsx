@@ -43,6 +43,49 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
      —— 这时页面看着像「记录被清零」。**只在确迹象象时出现，且要用户确认才重绑。 */
   const [orphan, setOrphan] = useState(() => store.orphanStatus())
   const [rebound, setRebound] = useState('')
+  /* 检查台（Day 20 · 余力加练）：健康接口状态 + 写入测试入口。
+     ⚠️ 都用**既有能力**（`/api/health` 与 POST 接口），不新增任何后端行为。 */
+  const [health, setHealth] = useState({ state: 'idle', text: '' })
+  const [probeId, setProbeId] = useState('1')
+  const [probe, setProbe] = useState({ state: 'idle', text: '' })
+
+  const checkHealth = useCallback(async () => {
+    setHealth({ state: 'busy', text: '' })
+    try {
+      const r = await store.debugHealth()
+      setHealth({
+        state: r.ok ? 'ok' : 'bad',
+        text: r.ok ? `正常 · ${r.body.service || 'yijing-64'} · ${r.ms} ms` : `异常 · HTTP ${r.status}`,
+      })
+    } catch (e) {
+      setHealth({ state: 'bad', text: '连不上：' + ((e && e.message) || '未知错误') })
+    }
+  }, [])
+
+  const runProbe = useCallback(async () => {
+    const id = Number(probeId)
+    if (!Number.isInteger(id) || id < 1 || id > 64) {
+      setProbe({ state: 'bad', text: '卦序号要填 1 – 64 之间的整数' })
+      return
+    }
+    setProbe({ state: 'busy', text: '' })
+    try {
+      const r = await store.debugApiWrite('favorites', { hexagramId: id })
+      const body = r.body || {}
+      const tip = r.status === 201 ? '已新建' : r.status === 200 ? '已收藏（幂等）' : '被拒绝'
+      setProbe({
+        state: r.status === 200 || r.status === 201 ? 'ok' : 'bad',
+        text: `卦 ${id} → HTTP ${r.status} · ${tip}${body.data ? ' · 收藏日 ' + body.data.createdAt : ''}${
+          body.error ? ' · ' + body.error.message : ''
+        }`,
+      })
+      // 写入可能改变了云端条数，把读取面板一起刷新
+      await store.refreshFromCloud()
+      setCloud(store.cloudReadStatus())
+    } catch (e) {
+      setProbe({ state: 'bad', text: '连不上：' + ((e && e.message) || '未知错误') })
+    }
+  }, [probeId])
 
   const readCloud = useCallback(async () => {
     setBusy(true)
@@ -76,7 +119,7 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
     }
   }, [])
 
-  /* 云端状态是**异步**拉回来的，首帧一定读不到 —— 所以这里不能只读一次：
+  /* ⚠️ 云端状态是**异步**拉回来的，首帧一定读不到 —— 所以这里不能只读一次：
    *   ① 订阅 `yijing:cloud-synced`（storage.js 每次合并成功都会派发）；
    *   ② 再加一条兜底轮询（合并成功但**没有新数据**时不会派发事件，只靠轮询）。
    * 两条合起来保证「拉取刚完成」的那一刻，界面一定会更新一次。
@@ -96,6 +139,21 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
     }
   }, [])
+
+  /* 「一键自检」：地址栏加 `?check=1` 就自动跑一遍健康检查 + 写入测试。
+     用途有两个：① 同伴拿到链接后不必点按钮就能看到接口通不通；
+     ② 验收时能截到「点了之后」的真实状态，而不是只有按钮的空面板。
+     ⚠️ 写入测试默认**不执行**（`?check=1` 只查不写），要连写入一起跑写 `?check=write` ——
+     写入是**真实往云端加一行**，不能默认就跑。 */
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('check')) return
+    checkHealth()
+    const mode = new URLSearchParams(window.location.search).get('check')
+    if (mode !== 'write') return
+    // 等健康检查把 busy 态走完再写，避免两条请求抢同一份会话
+    const t = setTimeout(runProbe, 2200)
+    return () => clearTimeout(t)
+  }, [checkHealth, runProbe])
   // ⚠️ 测验进度（F3）也算「有记录」—— 否则只测过一轮、还没起过卦时，
   //    这个页面会显示成空的，「清空我的记录」按钮就不出现，进度再也清不掉
   const empty = records.length === 0 && favorites.length === 0 && quizRounds === 0
@@ -357,6 +415,43 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
           <button type="button" className="rec-btn" onClick={readCloud} disabled={busy}>
             {busy ? '读取中…' : '重新读取'}
           </button>
+        </div>
+
+        {/* ── 检查台（Day 20）──
+            健康状态 / 核心表真实数据（上面那两个计数就是）/ 一次写入测试入口。
+            三项都用**既有能力**：`/api/health` 与 POST /api/favorites。 */}
+        <div className="rec-check">
+          <div className="rec-check-row">
+            <span className="rec-check-label">健康状态</span>
+            <button type="button" className="rec-btn rec-btn-sm" onClick={checkHealth} disabled={health.state === 'busy'}>
+              {health.state === 'busy' ? '检查中…' : '检查'}
+            </button>
+            {health.text ? (
+              <span className={'rec-check-out is-' + health.state}>{health.text}</span>
+            ) : (
+              <span className="rec-check-idle">点「检查」看云函数是否活着</span>
+            )}
+          </div>
+          <div className="rec-check-row">
+            <span className="rec-check-label">写入测试</span>
+            <input
+              type="number"
+              className="rec-check-input"
+              min="1"
+              max="64"
+              value={probeId}
+              onChange={(e) => setProbeId(e.target.value)}
+              aria-label="要收藏的卦序号"
+            />
+            <button type="button" className="rec-btn rec-btn-sm" onClick={runProbe} disabled={probe.state === 'busy'}>
+              {probe.state === 'busy' ? '写入中…' : '收藏这一卦'}
+            </button>
+          </div>
+          {probe.text ? <p className={'rec-check-out is-' + probe.state}>{probe.text}</p> : null}
+          <p className="rec-check-note">
+            写入测试会真的往云端收藏表加一行（已存在的卦返回 200，不重复写）。
+            这是<strong>真实数据</strong>，不是演示数据。
+          </p>
         </div>
       </section>
 
