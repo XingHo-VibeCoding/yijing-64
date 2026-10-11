@@ -4,6 +4,7 @@ import data from '../data/64卦.json'
 import yaoData from '../data/64卦-爻辞.json'
 import HexagramFigure from './HexagramFigure.jsx'
 import CastingAnimation from './CastingAnimation.jsx'
+import ThreeQuestions from './ThreeQuestions.jsx'
 import Records from './Records.jsx'
 import RestoreNotice from './RestoreNotice.jsx'
 import Quiz from './Quiz.jsx'
@@ -89,8 +90,10 @@ function castOnce() {
 
 export default function App() {
   const [currentId, setCurrentId] = useState(null)
-  const [casting, setCasting] = useState(null)   // { id, changing, archived }
+  const [casting, setCasting] = useState(null)   // { id, changing, archived, answers }
   const [castSeq, setCastSeq] = useState(0)      // 作为 key：保证「再起一卦」真的从头播
+  const [pendingCast, setPendingCast] = useState(null) // 出卦后、结果页前的三问浮层
+  const [answers, setAnswers] = useState(null)   // 三问作答（仅本次解读用，不入库）
   const [highlightId, setHighlightId] = useState(null)
   const [view, setView] = useState('list')       // 'list' | 'records'
   const [backTo, setBackTo] = useState('list')   // 详情页「返回」回到哪
@@ -171,8 +174,25 @@ export default function App() {
     const archived = store.archiveFirstOfToday(c.id, c.changing)
     setCastSeq((n) => n + 1)
     setCasting({ ...c, archived })
+    // ⚠️ 先落三问，再进结果页 —— 见 ThreeQuestions 的设计要点①：
+    //    三问只影响「解读怎么写」，不影响「卦是什么」。
+    // `?cast=` 深链（截图与分享用）**跳过三问**：它要的是稳定可复现，
+    //    加一层需要点按的浮层会让截图链路又卡住。
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.has('cast')) {
+      setAnswers(null)
+    } else {
+      setPendingCast({ ...c, archived })
+    }
     bump()
   }
+
+  /** 三问作答完毕（或跳过）→ 带上作答进结果页 */
+  const finishQuestions = useCallback((a) => {
+    setCasting((prev) => (prev ? { ...prev, answers: a && Object.keys(a).length ? a : null } : prev))
+    setPendingCast(null)
+    setAnswers(a && Object.keys(a).length ? a : null)
+  }, [])
 
   /* 深链：地址栏带 `?cast=<卦序>` 时自动起一次卦（配合 `?castSpeed=` 与 `?openReading=1`）。
    * 用途是**可分享某一卦的解读**与稳定截图 —— 此前截图每次都不一样，因为起卦用
@@ -291,8 +311,13 @@ export default function App() {
     }, 250)
   }
 
-  /* ---------- 起卦流程（动画 + 结果页） ---------- */
-  if (casting) {
+  /* ---------- 起卦流程：动画 → 三问 → 结果页 ---------- */
+  // ⚠️ 三问浮层优先于结果页：出卦后先问，问完（或跳过）才进解读。
+  //    这样「卦是什么」与「解读怎么说」在流程上就分开了 ——
+  //    用户不能通过选择来改变今天的卦，只能改变解读的语气与落点。
+  if (pendingCast) {
+    viewNode = <ThreeQuestions onDone={finishQuestions} />
+  } else if (casting) {
     const target = data.items.find((h) => h.id === casting.id)
     viewNode = (
       <CastingAnimation
@@ -300,6 +325,7 @@ export default function App() {
         result={target}
         // 只取第一个：解读聚焦一爻（万一有历史数据带多个变爻，界面也不会出现「多爻齐亮」）
         changingLines={casting.changing.slice(0, 1)}
+        answers={casting.answers || answers}
         archived={casting.archived}
         favorited={favorites.some((f) => f.hexagramId === casting.id)}
         onToggleFav={() => {

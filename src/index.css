@@ -1692,3 +1692,109 @@ body {
   border: 1px solid rgba(160, 110, 40, .34);
   border-radius: 3px;
 }
+
+/* ============================================================
+   起卦三问（出卦后、结果页前的浮层）
+   设计意图：像一枚压在案上的问笺 —— 宣纸底、墨框、竖向留白。
+   玄妙靠**语体**（文言腔），不靠视觉特效；不做发光、不做渐变。
+   ============================================================ */
+.tq-mask {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 18px;
+  background: rgba(28, 22, 14, .58);
+}
+.tq-box {
+  width: 100%; max-width: 560px;
+  padding: 26px 28px 20px;
+  background: #f7efe0;
+  border: 1px solid #b99a63;
+  border-radius: 4px;
+  box-shadow: 0 18px 46px rgba(20, 14, 6, .38);
+  color: #2c2419;
+  font-family: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "SimSun-ExtB", "STSong", serif;
+  animation: tq-in .42s ease-out both;
+}
+@keyframes tq-in {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+.tq-eyebrow { margin: 0; font-size: 12px; letter-spacing: .16em; color: #8a6a38; }
+.tq-title {
+  margin: 4px 0 8px; font-size: 27px; letter-spacing: .22em; color: #2c2419;
+}
+.tq-lead { margin: 0 0 20px; font-size: 13.5px; line-height: 1.9; color: #5a4a32; }
+.tq-lead b { color: #7a4a10; }
+
+.tq-step-no { margin: 0; font-size: 13px; letter-spacing: .12em; color: #8a6a38; }
+.tq-ask {
+  margin: 6px 0 4px; font-size: 19px; line-height: 1.7; color: #2c2419; letter-spacing: .03em;
+}
+.tq-hint { margin: 0 0 12px; font-size: 12.5px; color: #8a7a63; }
+
+.tq-opts { list-style: none; margin: 14px 0 0; padding: 0; }
+.tq-opts li { margin: 0 0 9px; }
+.tq-opt {
+  display: flex; align-items: baseline; gap: 12px;
+  width: 100%; padding: 11px 14px;
+  font-family: inherit; text-align: left; cursor: pointer;
+  color: #2c2419;
+  background: #fffcf4;
+  border: 1px solid #cdb488;
+  border-radius: 3px;
+  transition: background .18s, border-color .18s, transform .12s;
+}
+.tq-opt:hover { background: #fbf3e0; border-color: #a8823f; }
+.tq-opt:active { transform: translateY(1px); }
+.tq-opt:focus-visible { outline: 2px solid #8a6a38; outline-offset: 2px; }
+.tq-opt-key {
+  flex: none; width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; color: #6f5330;
+  border: 1px solid #c2a678; border-radius: 3px;
+}
+.tq-opt-word {
+  flex: none; min-width: 1.6em;
+  font-size: 18px; color: #7a4a10; letter-spacing: .06em;
+}
+.tq-opt-desc { font-size: 14px; line-height: 1.7; color: #5a4a32; }
+
+.tq-step-done { padding: 26px 0 18px; text-align: center; }
+.tq-done { margin: 0; font-size: 20px; letter-spacing: .2em; color: #2c2419; }
+.tq-done-sub { margin: 8px 0 0; font-size: 13px; color: #8a7a63; }
+
+.tq-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; margin-top: 20px; padding-top: 14px;
+  border-top: 1px dashed rgba(138, 106, 56, .4);
+}
+.tq-dots { display: flex; gap: 7px; }
+.tq-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: rgba(138, 106, 56, .26);
+  border: 1px solid rgba(138, 106, 56, .5);
+}
+.tq-dot.is-on { background: #8a6a38; border-color: #6d5228; }
+.tq-skip {
+  padding: 7px 15px; font-family: inherit; font-size: 13.5px; cursor: pointer;
+  color: #6f5330; background: transparent;
+  border: 1px solid rgba(138, 106, 56, .5); border-radius: 3px;
+}
+.tq-skip:hover { background: rgba(138, 106, 56, .1); }
+.tq-skip:focus-visible { outline: 2px solid #8a6a38; outline-offset: 2px; }
+
+/* 结果页的「此卦一句」区块：与第三层三段区分开 */
+.cr-verdict {
+  margin: 6px 0 0;
+  padding: 3px 0 3px 13px;
+  border-left: 3px solid rgba(160, 110, 40, .5);
+  font-size: 16.5px; line-height: 2; color: #4b3820; letter-spacing: .02em;
+}
+.cr-shortlayer { margin-top: 20px; }
+
+@media (max-width: 430px) {
+  .tq-box { padding: 20px 18px 16px; }
+  .tq-ask { font-size: 17px; }
+  .tq-opt { padding: 10px 11px; gap: 9px; }
+  .tq-opt-desc { font-size: 13px; }
+}

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import yaoData from '../data/64卦-爻辞.json'
 import SourceTag from './SourceTag.jsx'
+import { verdictLine } from './reading/verdict.js'
+import { appendAnswers } from './reading/threeQuestions.js'
 import { buildThirdLayer, situationLine, resonanceLine, landingLine } from './reading/thirdLayer.js'
 
 /**
@@ -49,6 +51,7 @@ export default function CastResult({
   onFocusLine,
   focusing = false,
   archived = false,
+  answers = null,
   favorited = false,
   onToggleFav,
   onRecast,
@@ -89,6 +92,9 @@ export default function CastResult({
   const third = buildThirdLayer(result, fortune)
   const situation = third.situation
   const resonance = third.resonance
+  /* 逐卦短评：先取该卦专属句，若用户答了三问则把「所向 / 所阻 / 所需」接在其后。
+     ⚠️ 顺序不能反 —— `appendAnswers` 依赖 `verdictLine`，两者都要在 `return` 之前算完。 */
+  const shortVerdict = appendAnswers(verdictLine(result), answers)
   /* 凶卦落点里的「运随时变，成事在人」是 PRD 指定的固定句，保留加粗 */
   const landingNode = third.landing.split('**').map((seg, i) =>
     i % 2 === 1 ? <b key={i}>{seg}</b> : <span key={i}>{seg}</span>
@@ -205,6 +211,23 @@ export default function CastResult({
                 note="卦辞与爻辞取自通行本（王弼本），已逐条核对，一字未改"
               />
             </section>
+
+            {/* 逐卦短评（含三问作答）—— 与第三层分开：
+                短评是「一句定语」，第三层是「处境 / 共鸣 / 落点」三段展开。
+                两者内容不同、粒度不同，混在一起会让人读着重复。 */}
+            {shortVerdict ? (
+              <section className="cr-layer cr-shortlayer">
+                <h2 className="cr-layer-title">
+                  <span className="cr-layer-no">短评</span>
+                  此卦一句
+                </h2>
+                <p className="cr-verdict">{shortVerdict}</p>
+                <SourceTag
+                  kind="ours"
+                  note="本项目的理解，不是《周易》里的话"
+                />
+              </section>
+            ) : null}
 
             {/* 第三层 · 想跟你说的话
                 三段：处境（由卦象推出）→ 共鸣（福勒式通用句）→ 落点（吉凶固定）。

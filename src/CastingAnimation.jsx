@@ -274,6 +274,7 @@ export default function CastingAnimation({
   result,
   changingLines = [],
   archived = false,
+  answers = null,
   favorited = false,
   onToggleFav,
   onRecast,
@@ -514,6 +515,7 @@ export default function CastingAnimation({
           result={result}
           changingLines={changingLines}
           archived={archived}
+          answers={answers}
           favorited={favorited}
           onToggleFav={onToggleFav}
           onRecast={onRecast}
