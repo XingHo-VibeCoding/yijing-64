@@ -1709,7 +1709,12 @@ body {
   transition: background-color 1s ease-in-out, opacity 1.1s ease-in-out;
 }
 .qi-stage.is-paper { background-color: rgba(247, 239, 224, .97); }
-.qi-stage.is-inked { background-color: rgba(24, 20, 16, .96); }
+.qi-stage.is-inked {
+  /* 兜底深墨：真实浏览器里 canvas 黑云先翻涌上屏，这里慢半拍补遮蔽——
+     避免出现「一整块纯色黑屏」（用户指正：汇聚要像起卦动画的黑云翻涌） */
+  background-color: rgba(22, 18, 14, .82);
+  transition: background-color 1.5s ease-out, opacity 1.1s ease-in-out;
+}
 .qi-stage.is-final {
   background-color: rgba(24, 20, 16, 0);
   opacity: 0;
@@ -1719,12 +1724,12 @@ body {
 .qi-dom {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
-  padding: 15vh clamp(20px, 6vw, 84px) 26px;
+  padding: 17vh clamp(20px, 6vw, 84px) 26px;
   max-width: 720px; margin: 0 auto;
   transition: opacity .5s ease;
 }
 .qi-stage.is-inked .qi-dom { opacity: 0; } /* 墨盖上来时，内容先行淡出 */
-.qi-eyebrow { margin: 0 0 30px; font-size: 12px; letter-spacing: .18em; color: #8a6a38; }
+.qi-eyebrow { margin: 0 0 34px; font-size: 13px; letter-spacing: .22em; color: #8a6a38; font-family: "Kaiti SC", "STKaiti", "KaiTi", "楷体", serif; }
 
 /* 逐字墨迹显影：模糊+晕影 → 清晰收干（「水墨形式浮现」） */
 .tq-char {
@@ -1732,7 +1737,7 @@ body {
   opacity: 0;
   filter: blur(7px);
   text-shadow: 0 0 14px rgba(24, 20, 16, .55);
-  animation: tq-char-in .62s ease-out forwards;
+  animation: tq-char-in .9s ease-out forwards;
   white-space: pre;
 }
 @keyframes tq-char-in {
@@ -1749,38 +1754,43 @@ body {
   to { opacity: 1; filter: blur(0); transform: none; }
 }
 
-.tq-step-no { margin: 0; font-size: 13px; letter-spacing: .12em; color: #8a6a38; }
+.tq-step-no { margin: 0; font-size: 14px; letter-spacing: .14em; color: #8a6a38; font-family: "Kaiti SC", "STKaiti", "KaiTi", "楷体", serif; }
 .tq-ask {
-  margin: 6px 0 4px; font-size: 19px; line-height: 1.7; color: #2c2419; letter-spacing: .03em;
+  margin: 10px 0 6px;
+  font-family: "Kaiti SC", "STKaiti", "KaiTi", "楷体", "Songti SC", serif;
+  font-size: 27px; font-weight: 600;
+  line-height: 1.75; color: #1f1a14;
+  letter-spacing: .06em;
 }
-.tq-hint { margin: 0 0 12px; font-size: 12.5px; color: #8a7a63; }
+.tq-hint { margin: 0 0 16px; font-size: 13.5px; color: #8a7a63; font-family: "Kaiti SC", "STKaiti", "KaiTi", "楷体", serif; }
 
 .tq-opts { list-style: none; margin: 14px 0 0; padding: 0; }
 .tq-opts li { margin: 0 0 9px; }
+/* 选项：无底框——直接在雾面上以文字呈现（用户指正），hover 时墨色沉下去 */
 .tq-opt {
-  display: flex; align-items: baseline; gap: 12px;
-  width: 100%; padding: 11px 14px;
+  display: flex; align-items: baseline; gap: 14px;
+  width: 100%; padding: 9px 10px;
   font-family: inherit; text-align: left; cursor: pointer;
   color: #2c2419;
-  background: #fffcf4;
-  border: 1px solid #cdb488;
-  border-radius: 3px;
-  transition: background .18s, border-color .18s, transform .12s;
+  background: transparent;
+  border: none; border-radius: 3px;
+  transition: color .2s, transform .15s;
 }
-.tq-opt:hover { background: #fbf3e0; border-color: #a8823f; }
-.tq-opt:active { transform: translateY(1px); }
+.tq-opt:hover { color: #120e09; transform: translateX(4px); }
+.tq-opt:active { transform: translateX(4px) scale(.995); }
 .tq-opt:focus-visible { outline: 2px solid #8a6a38; outline-offset: 2px; }
 .tq-opt-key {
-  flex: none; width: 20px; height: 20px;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 12px; color: #6f5330;
-  border: 1px solid #c2a678; border-radius: 3px;
+  flex: none; width: auto;
+  font-size: 13px; color: #8a6a38;
 }
 .tq-opt-word {
-  flex: none; min-width: 1.6em;
-  font-size: 18px; color: #7a4a10; letter-spacing: .06em;
+  flex: none; min-width: 2.2em;
+  font-family: "Kaiti SC", "STKaiti", "KaiTi", "楷体", "Songti SC", serif;
+  font-size: 23px; font-weight: 600; color: #53380e; letter-spacing: .08em;
 }
-.tq-opt-desc { font-size: 14px; line-height: 1.7; color: #5a4a32; }
+.tq-opt:hover .tq-opt-word { color: #1f1a14; }
+.tq-opt-desc { font-size: 14.5px; line-height: 1.7; color: #6b5c46; }
+.tq-opt:hover .tq-opt-desc { color: #3a2c18; }
 
 .tq-step-done { padding: 26px 0 18px; text-align: center; }
 .tq-done { margin: 0; font-size: 20px; letter-spacing: .2em; color: #2c2419; }

@@ -1,38 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { QUESTIONS, answersComplete } from './reading/threeQuestions.js'
+import { QUESTIONS } from './reading/threeQuestions.js'
 
 /**
- * 起卦三问 · 水墨全屏转场（Day 22 重做 UI，用户指定分镜）：
+ * 起卦三问 · 水墨全屏转场 v2（Day 22 用户复核后重做）：
  *
- *   ① 点「起 一 卦」后 —— 白色云气升腾，铺满成一张「纸面」（遮住屏幕）
- *   ② 纸面上问题以水墨形式浮现（题面逐字显影，选项依次洇出）
- *   ③ 每答完一题 —— 淡墨云涌起汇集遮满 → 散开时**新问题的字**逐个显影
- *   ④ 三问答完（或跳过）—— 墨云再次汇集，散开时露出的是**起卦动画**
- *      （遮满一瞬动画已在下层开播，墨散即衔接）
+ *   ① 点「起 一 卦」→ 白色雾气升腾铺满（**先让雾稳住，再出字**——此前 1.5s 就出题，
+ *      雾未实、题面与首页内容重叠，用户截图指正）
+ *   ② 雾面翻涌的背景上，问题以**黑色毛笔楷体**直接浮现（无底框、无衬底墨晕）
+ *   ③ 每答完一题，**黑云翻涌汇集**（参考起卦动画的墨云观感：交错翻涌，不是纯色黑屏）
+ *      → 散开时新问题的字逐个显影
+ *   ④ 三问答完黑云再汇集，散开时进入起卦动画（遮满一瞬动画已在下层开播）
  *
  * ============================================================
- * 结构约定（与 InkTransition / MistTransition / QuizInkSweep 同族）：
- *   - portal 到 body（防 filter 改 fixed 定位基准）
- *   - 单 canvas + 单 rAF 主循环，确定性逐帧重绘（同一 el 永远同一画面）
- *   - 回调走 latest-ref；onCovered 一次性 latch
- *   - ?transFreeze=N 定格在 N ms（只画不走，不触发回调）
+ * 结构约定（同族）：portal 到 body、单 canvas 单 rAF、确定性逐帧重绘、
+ * 回调 latest-ref、?transFreeze=N 定格、?tqPhase 直达、?tqFinal 直达散开段。
  * ============================================================
  *
- * ⚠️ 流程边界（沿用 Day 22 的产品判断，不许动摇）：
- *   - 三问**不影响「卦是什么」**：卦在点按钮那刻已由 castOnce 定死，
- *     三问只影响「解读怎么写」。遮满时动画才开播，但卦早已定。
- *   - 可跳过，跳过也完全可用（短评逐卦原句）。
- *   - 作答只存内存、不上云、不进记录。
+ * ⚠️ 产品边界（不许动摇）：
+ *   - 三问**必须回答**（用户明确去掉「直接看解读」）；`?cast=` 深链仍跳过（调试用）
+ *   - 三问不影响「卦是什么」；作答只存内存、不上云、不进记录
  */
 
 const INK = '24, 20, 16'
-const PAPER = '247, 239, 224' // 纸面基色（同 .tq-box 宣纸底）
+const PAPER = '247, 239, 224'
 
-/* 时间轴（ms） */
-const T_VEIL = 1500 // 白雾铺满成纸面
-const T_COVER = 1150 // sweep：墨云遮满（换题/进动画点）
-const T_SWEEP_END = 2300 // sweep：墨散完毕
+/* 时间轴（ms）——veil 加长：先让雾稳住再出字（用户指正「浮现太快导致重叠」） */
+const T_VEIL = 2200
+const T_COVER = 1400 // sweep：黑云遮满（换题/进动画点）
+const T_SWEEP_END = 2750 // sweep：散开完毕
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v))
 const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
@@ -40,26 +36,17 @@ const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3)
 
 export default function QuestionInkFlow({ onAllAnswered, onExit }) {
   const canvasRef = useRef(null)
-  /* step：当前第几问（0–2）；phase：veil（雾起）/ ask（作答）/ sweep（墨涌换题） */
-  /* ⚠️ initPhase 必须在所有引用它的 useState **之前**声明 ——
-   * 此前它声明在 modeRef 附近（靠后），而 phase 的 useState 在前面就用了它，
-   * 打包后触发 TDZ（Cannot access before initialization），整棵树白屏。
-   * 教训同 Day 21 的 fortune TDZ：**声明顺序要按使用顺序排，不能按语义分组排**。 */
-  const initPhase = new URLSearchParams(
+  /* ⚠️ initPhase 必须在所有引用它的 useState **之前**声明（TDZ 教训见注释尾部） */
+  const initParams = new URLSearchParams(
     typeof window !== 'undefined' ? window.location.search : ''
-  ).get('tqPhase')
+  )
+  const initPhase = initParams.get('tqPhase')
+  const initFinal = initParams.get('tqFinal') === '1'
+
   const [step, setStep] = useState(0)
   const [phase, setPhase] = useState(initPhase === 'ask' || initPhase === 'sweep' ? initPhase : 'veil')
   const [answers, setAnswers] = useState({})
-  /* CSS 底的状态机：veil 完成 → is-paper（纸面）；sweep 开始 → is-inked（墨遮满）；
-   * final 遮满 → is-final（整层淡出露动画）；普通换题散开 → 回 is-paper */
-  /* ⚠️ 直达相位（?tqPhase）跳过了 veil/前序 sweep，CSS 底的初值必须与「已到达」的
-   * 视觉状态一致：直达 ask = 纸面已在；直达 sweep = 墨已遮满。
-   * 否则 is-paper / is-inked 永远不会置位，底色透明、下层页面整个透出来（截图抓到过）。 */
-  /* ?tqFinal=1：直达「三问答完后的散开段」（验证墨散露出起卦动画） */
-  const initFinal = new URLSearchParams(
-    typeof window !== 'undefined' ? window.location.search : ''
-  ).get('tqFinal') === '1'
+  /* CSS 底状态机：veil 完成 → is-paper；sweep → is-inked；final 遮满 → is-final */
   const [veiled, setVeiled] = useState(initPhase === 'ask' || initPhase === 'sweep')
   const [inked, setInked] = useState(initPhase === 'sweep')
   const [leaving, setLeaving] = useState(initFinal)
@@ -67,16 +54,11 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
 
   const cbRef = useRef({})
   cbRef.current = { onAllAnswered, onExit }
-  /* latest-ref：canvas 循环读这里，不因重渲染重建 */
   const stepRef = useRef(0)
   stepRef.current = step
   const answersRef = useRef(answers)
   answersRef.current = answers
-  /* canvas 循环的模式：veil | idle | sweep。
-   * ?tqPhase=ask|sweep 直达该相位（与 ?qcStart 同族的调试约定）；final 时 paperA 也会按 final 渐隐 */
-  /* ⚠️ 值域映射：DOM 的 phase 叫 'ask'，canvas 的模式叫 'idle' ——
-   * 此前 tqPhase=ask 直达时 modeRef='ask' 不匹配循环里任何绘制分支，
-   * canvas 整帧空白 → 纸面底没画 → 下层页面整个透出来（截图抓到的）。 */
+  /* canvas 模式：veil | idle | sweep（⚠️ DOM 的 phase=ask 对应 canvas 的 idle——值域映射） */
   const modeRef = useRef(initPhase === 'sweep' ? 'sweep' : initPhase === 'ask' ? 'idle' : 'veil')
   const sweepStartRef = useRef(0)
 
@@ -84,18 +66,16 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
     const next = { ...answersRef.current, [qKey]: optId }
     answersRef.current = next
     setAnswers(next)
+    /* ⚠️ 必须回答：最后一问答完才 final；不存在跳过路径 */
     beginSweep(stepRef.current === QUESTIONS.length - 1)
   }
 
-  const skip = () => beginSweep(true)
-
-  /** 进入墨涌段。final=true 表示遮满后直接进起卦动画 */
   const beginSweep = (final) => {
     finalRef.current = final
     modeRef.current = 'sweep'
     sweepStartRef.current = performance.now()
     setPhase('sweep')
-    setInked(true) // CSS 底随即开始向墨色过渡（与 canvas 墨云同步涌起）
+    setInked(true)
   }
 
   /* ---------------- canvas 主循环（mount 一次） ---------------- */
@@ -118,59 +98,52 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
     }
     fit()
 
-    /* ?transFreeze=N：定格（同族转场约定） */
-    const fz = parseFloat(new URLSearchParams(window.location.search).get('transFreeze'))
-    const FREEZE = Number.isFinite(fz) && fz >= 0 ? fz : null
+    const FREEZE_RAW = new URLSearchParams(window.location.search).get('transFreeze')
+    const FREEZE = FREEZE_RAW === null ? null : Number(FREEZE_RAW)
 
-    /* 白雾团：自下升腾铺满（veil 相位用），铺满后化为纸面 */
-    const blobs = []
-    for (let i = 0; i < 16; i++) {
-      blobs.push({
-        x: (0.04 + 0.92 * (i / 15) + (Math.random() - 0.5) * 0.06) * 1440,
-        y: H + 40 + Math.random() * H * 0.5,
-        r: (80 + Math.random() * 140) * (W / 1440),
-        v: (0.3 + Math.random() * 0.32) * H,
-        sway: 18 + Math.random() * 44,
+    /* ---------- 白雾团：veil 升腾 + idle 常驻翻涌（更亮的白，纸面上可见） ---------- */
+    const mist = []
+    for (let i = 0; i < 18; i++) {
+      mist.push({
+        bx: Math.random(), // 比例坐标（resize 重投影）
+        y0: H + 40 + Math.random() * H * 0.5,
+        r: (110 + Math.random() * 170) * (W / 1440),
+        v: (0.26 + Math.random() * 0.3) * H,
+        sway: 24 + Math.random() * 52,
         ph: Math.random() * Math.PI * 2,
-        a: 0.2 + Math.random() * 0.22,
-        delay: Math.random() * 350,
+        a: 0.3 + Math.random() * 0.3,
+        delay: Math.random() * 400,
       })
     }
 
-    /* 淡墨云团：ask 相位常驻流动（云雾流动感是项目硬约束——拒绝静止背景） */
-    const clouds = []
-    for (let cx = 0; cx < 8; cx++) {
-      for (let cy = 0; cy < 4; cy++) {
-        clouds.push({
-          x: ((cx + 0.5) / 8 + (Math.random() - 0.5) * 0.14) * 1440,
-          r: (90 + Math.random() * 130) * (W / 1440),
-          v: H * (0.00016 + Math.random() * 0.00012), // 缓慢：作答时的底，只流动不抢戏
-          sway: 20 + Math.random() * 34,
-          ph: Math.random() * Math.PI * 2,
-          a: 0.05 + Math.random() * 0.045,
-          delay: Math.random() * 800,
-        })
-      }
-    }
-
-    /* sweep 墨云团：涌起遮满用（快而厚） */
+    /* ---------- 黑云团：sweep 翻涌（参考起卦动画观感：交错扰动、遮满后仍缓滚） ----------
+     * 每团带 3 个偏移子团，子团绕母心慢转 → 碎云翻涌感，不是一颗颗圆球直线上升 */
     const surge = []
-    for (let cx = 0; cx < 8; cx++) {
-      for (let cy = 0; cy < 4; cy++) {
-        surge.push({
-          x: ((cx + 0.5) / 8 + (Math.random() - 0.5) * 0.14) * 1440,
-          r: (95 + Math.random() * 140) * (W / 1440),
-          v: H * (0.00055 + Math.random() * 0.00035),
-          sway: 18 + Math.random() * 30,
-          ph: Math.random() * Math.PI * 2,
-          a: 0.16 + Math.random() * 0.12,
-          delay: Math.random() * 450,
+    for (let i = 0; i < 14; i++) {
+      const kids = []
+      for (let k = 0; k < 3; k++) {
+        kids.push({
+          ang: Math.random() * Math.PI * 2,
+          rr: 0.25 + Math.random() * 0.5, // 相对母团半径的偏移
+          w: (Math.random() - 0.5) * 0.0016, // 子团绕行角速度
+          r: 0.45 + Math.random() * 0.4,
         })
       }
+      surge.push({
+        bx: (0.06 + 0.88 * (i / 13) + (Math.random() - 0.5) * 0.05),
+        y0: H + 80 + (i % 4) * 110 + Math.random() * 70,
+        r: (130 + Math.random() * 170) * (W / 1440),
+        v: H * (0.0005 + Math.random() * 0.0003),
+        sway: 22 + Math.random() * 40,
+        ph: Math.random() * Math.PI * 2,
+        a: 0.2 + Math.random() * 0.14,
+        delay: Math.random() * 500,
+        kids,
+        roll: (Math.random() - 0.5) * 0.0012, // 母团自转
+      })
     }
 
-    /* x 坐标按当前 W 重投影（blobs/clouds 以 1440 基准存的比例位置） */
-    const px = (x) => (x / 1440) * W
+    const px = (ratio) => ratio * W
 
     const t0 = performance.now()
     let veilDone = false
@@ -178,37 +151,61 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
     let exited = false
     let raf = 0
 
+    /** 画一朵「碎云」：母团 + 绕行子团，各自呼吸（软边径向渐变叠加） */
+    function drawCloud(x, y, r, alpha, t, c) {
+      if (alpha <= 0.012) return
+      const spin = t * c.roll
+      const cs = Math.cos(spin)
+      const sn = Math.sin(spin)
+      // 母团
+      let g = ctx.createRadialGradient(x, y, 0, x, y, r)
+      g.addColorStop(0, `rgba(${INK}, ${alpha})`)
+      g.addColorStop(0.6, `rgba(${INK}, ${alpha * 0.62})`)
+      g.addColorStop(1, `rgba(${INK}, 0)`)
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+      // 子团：绕母心慢转 + 呼吸 → 翻涌的碎云
+      for (const k of c.kids) {
+        const ka = k.ang + t * k.w
+        const rr2 = r * k.rr * (1 + Math.sin(t * 0.0011 + k.ang * 3) * 0.18)
+        const kx = x + Math.cos(ka) * rr2
+        const ky = y + Math.sin(ka) * rr2 * 0.9
+        const kr = r * k.r
+        const ka2 = alpha * 0.8
+        g = ctx.createRadialGradient(kx, ky, 0, kx, ky, kr)
+        g.addColorStop(0, `rgba(${INK}, ${ka2})`)
+        g.addColorStop(0.6, `rgba(${INK}, ${ka2 * 0.6})`)
+        g.addColorStop(1, `rgba(${INK}, 0)`)
+        ctx.fillStyle = g
+        ctx.beginPath()
+        ctx.arc(kx, ky, kr, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+
     const loop = (now) => {
       const el = FREEZE != null ? FREEZE : now - t0
       const mode = modeRef.current
-      /* FREEZE 时用「定格时刻以来」的 sweep 局部时间，保证 sweep 画面正确 */
-      if (FREEZE != null && mode === 'sweep') {
-        sweepStartRef.current = 0 // sweep 局部时间 = el
-      }
 
       ctx.clearRect(0, 0, W, H)
 
-      /* ---------- 纸面底改由 CSS 承担（.qi-stage 背景 + 状态 class 过渡） ----------
-       * 原因：无头截图（虚拟时间）下 canvas 层不进合成输出——纸面画了也截不到，
-       * 视觉验证只能靠 DOM。分工改为：CSS 管静态底与遮满/散开过渡（可验证、可降级），
-       * canvas 只画动态云雾（veil 白雾 / idle 流云 / sweep 墨涌），真实浏览器中作质感增强。
-       * canvas 位图本身已用探针验证非空（toDataURL ≈ 695KB）。 */
-
-      /* ---------- veil 相位：白雾自下升腾（铺满的那刻转 ask） ---------- */
+      /* ---------- veil：白雾升腾（雾稳住后才转 ask——用户指正的重叠根因） ---------- */
       if (mode === 'veil') {
         const t = el / 1000
-        for (const b of blobs) {
+        for (const b of mist) {
           const lt = Math.max(0, el - b.delay)
           if (lt <= 0) continue
-          const y = b.y - b.v * (lt / 1000) - easeOutCubic(clamp01(lt / 2500)) * H * 0.35
+          const y = b.y0 - b.v * (lt / 1000) - easeOutCubic(clamp01(lt / 2600)) * H * 0.35
           if (y < -b.r) continue
-          const x = px(b.x) + Math.sin(t * 0.7 + b.ph) * b.sway
+          const x = px(b.bx) + Math.sin(t * 0.7 + b.ph) * b.sway
           const a = b.a * clamp01(lt / 500)
           if (a <= 0.01) continue
           const g = ctx.createRadialGradient(x, y, 0, x, y, b.r)
-          g.addColorStop(0, `rgba(248, 245, 238, ${a})`)
-          g.addColorStop(0.55, `rgba(243, 239, 230, ${a * 0.55})`)
-          g.addColorStop(1, `rgba(243, 239, 230, 0)`)
+          g.addColorStop(0, `rgba(250, 247, 240, ${a})`)
+          g.addColorStop(0.55, `rgba(246, 242, 233, ${a * 0.55})`)
+          g.addColorStop(1, `rgba(246, 242, 233, 0)`)
           ctx.fillStyle = g
           ctx.beginPath()
           ctx.arc(x, y, b.r, 0, Math.PI * 2)
@@ -222,76 +219,75 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
         }
       }
 
-      /* ---------- idle 相位：淡墨云常驻流动 + 题面背后一团墨晕呼吸 ---------- */
+      /* ---------- idle：白雾翻涌常驻（比纸色亮的雾团缓慢滚动，翻涌可见） ---------- */
       if (mode === 'idle') {
         const t = el / 1000
-        for (const c of clouds) {
-          if (el < c.delay) continue
-          const cycle = ((el - c.delay) * c.v) % (H + c.r * 2)
-          const y = H + c.r - cycle
-          const x = px(c.x) + Math.sin(el / 650 + c.ph) * c.sway
-          const env = clamp01(cycle / (c.r * 1.4)) * clamp01((H + c.r - cycle) / (c.r * 1.4))
-          const a = c.a * env
+        for (const b of mist) {
+          /* 确定性循环：雾团在屏内缓滚，不出屏 */
+          const cyc = (el * b.v * 0.0006 + b.delay) % (H + b.r * 2)
+          const y = H + b.r - cyc
+          const x = px(b.bx) + Math.sin(el / 900 + b.ph) * b.sway * 1.4
+          const env = clamp01(cyc / (b.r * 1.4)) * clamp01((H + b.r - cyc) / (b.r * 1.4))
+          const a = 0.34 * env
           if (a <= 0.01) continue
-          const g = ctx.createRadialGradient(x, y, 0, x, y, c.r)
-          g.addColorStop(0, `rgba(${INK}, ${a})`)
-          g.addColorStop(0.6, `rgba(${INK}, ${a * 0.6})`)
+          const g = ctx.createRadialGradient(x, y, 0, x, y, b.r)
+          g.addColorStop(0, `rgba(252, 250, 244, ${a})`)
+          g.addColorStop(0.6, `rgba(250, 246, 238, ${a * 0.5})`)
+          g.addColorStop(1, `rgba(250, 246, 238, 0)`)
+          ctx.fillStyle = g
+          ctx.beginPath()
+          ctx.arc(x, y, b.r, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        /* 极淡墨晕交替：让「翻涌」有明暗层次，不是一片白 */
+        const t2 = el / 1000
+        for (let i = 0; i < 5; i++) {
+          const gy = ((i * 0.21 + t2 * 0.014) % 1.1 - 0.05) * H
+          const gx = W * (0.2 + 0.6 * ((i * 0.37 + Math.sin(t2 * 0.2 + i) * 0.12) % 1))
+          const a = 0.028 + 0.014 * Math.sin(t2 * 0.5 + i * 2.1)
+          const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, Math.min(W, H) * 0.3)
+          g.addColorStop(0, `rgba(${INK}, ${Math.max(0.005, a)})`)
           g.addColorStop(1, `rgba(${INK}, 0)`)
           ctx.fillStyle = g
           ctx.beginPath()
-          ctx.arc(x, y, c.r, 0, Math.PI * 2)
+          ctx.arc(gx, gy, Math.min(W, H) * 0.3, 0, Math.PI * 2)
           ctx.fill()
         }
-        /* 题面背后的墨晕：极淡、缓慢呼吸（呼应「水墨形式浮现」） */
-        const breath = 0.045 + 0.014 * Math.sin(el / 1400)
-        const gy = H * 0.34
-        const g = ctx.createRadialGradient(W / 2, gy, 0, W / 2, gy, Math.min(W, H) * 0.46)
-        g.addColorStop(0, `rgba(${INK}, ${breath})`)
-        g.addColorStop(0.6, `rgba(${INK}, ${breath * 0.55})`)
-        g.addColorStop(1, `rgba(${INK}, 0)`)
-        ctx.fillStyle = g
-        ctx.beginPath()
-        ctx.ellipse(W / 2, gy, W * 0.44, Math.min(W, H) * 0.4, 0, 0, Math.PI * 2)
-        ctx.fill()
       }
 
-      /* ---------- sweep 相位：墨云涌起遮满 →（遮满一瞬换题/进动画）→ 散开 ---------- */
+      /* ---------- sweep：黑云翻涌（涌上遮满 → 遮满后原地缓滚 → 散开） ---------- */
       if (mode === 'sweep') {
         const sp = el - sweepStartRef.current
         const outP = clamp01((sp - T_COVER) / (T_SWEEP_END - T_COVER))
         const live = 1 - easeInOutCubic(outP)
+        const surgeP = clamp01(sp / (T_COVER * 0.85))
         for (const c of surge) {
           if (sp < c.delay) continue
-          const cycle = ((sp - c.delay) * c.v) % (H + c.r * 2)
-          const y = H + c.r - cycle
-          const x = px(c.x) + Math.sin(sp / 650 + c.ph) * c.sway
-          const env = clamp01(cycle / (c.r * 1.4)) * clamp01((H + c.r - cycle) / (c.r * 1.4))
-          const a = c.a * env * (0.35 + 0.65 * clamp01(sp / (T_COVER * 0.8))) * live
-          if (a <= 0.01) continue
-          const g = ctx.createRadialGradient(x, y, 0, x, y, c.r)
-          g.addColorStop(0, `rgba(${INK}, ${a})`)
-          g.addColorStop(0.6, `rgba(${INK}, ${a * 0.6})`)
-          g.addColorStop(1, `rgba(${INK}, 0)`)
-          ctx.fillStyle = g
-          ctx.beginPath()
-          ctx.arc(x, y, c.r, 0, Math.PI * 2)
-          ctx.fill()
+          const prog = (sp - c.delay) * c.v
+          /* 遮满前：自下涌上；遮满后：在屏内原地缓滚（翻涌不是死黑） */
+          let y
+          if (prog < H + c.r) y = H + c.r - prog
+          else y = ((prog - (H + c.r)) % (H * 0.5)) * 0.2 + H * 0.25
+          const x = px(c.bx) + Math.sin(sp / 700 + c.ph) * c.sway
+          const env = sp < T_COVER
+            ? clamp01(prog / (c.r * 1.2))
+            : 1
+          const a = c.a * env * (0.4 + 0.6 * surgeP) * live
+          drawCloud(x, y, c.r * (0.9 + 0.25 * surgeP), a, sp, c)
         }
-        /* 兜底墨面：遮满前铺实；散开段整体变淡并向上飘走 */
-        const veilA = 0.95 * easeInOutCubic(clamp01((sp - 300) / (T_COVER - 300))) * live
+        /* 兜底墨面：涌起后半段补实（保证换题藏在墨下）；散开段整体变淡上飘 */
+        const veilA = 0.94 * easeInOutCubic(clamp01((sp - 350) / (T_COVER - 350))) * live
         if (veilA > 0.01) {
           ctx.fillStyle = `rgba(${INK}, ${veilA})`
-          ctx.fillRect(0, -easeInOutCubic(outP) * H * 0.25, W, H)
+          ctx.fillRect(0, -easeInOutCubic(outP) * H * 0.22, W, H)
         }
         if (!covered && sp >= T_COVER && FREEZE == null) {
           covered = true
           setInked(true)
           if (finalRef.current) {
-            /* 遮满一瞬：起卦动画在下层开播（overlay 继续盖着播墨散） */
             setLeaving(true)
             cbRef.current.onAllAnswered && cbRef.current.onAllAnswered(answersRef.current)
           } else {
-            /* 换题：墨散的过程中新问题的字正在逐个显影 */
             setStep((s) => Math.min(s + 1, QUESTIONS.length - 1))
           }
         }
@@ -299,16 +295,16 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
           if (finalRef.current && !exited) {
             exited = true
             cbRef.current.onExit && cbRef.current.onExit()
-            return // 卸载：下层动画接管
+            return
           }
           covered = false
           modeRef.current = 'idle'
           setPhase('ask')
-          setInked(false) // 墨散开，回到纸面
+          setInked(false)
         }
       }
 
-      if (FREEZE != null) return // 定格：只画当前相位画面，不推进不回调
+      if (FREEZE != null) return // 定格：画当前相位画面，不推进不回调
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
@@ -322,7 +318,6 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
 
   const Q = QUESTIONS[step]
   const answered = Object.keys(answers).length
-  /* veil 相位不渲染题面；sweep 相位 DOM 留在原地，由 CSS 淡出（被涌起的墨盖住） */
 
   return createPortal(
     <div
@@ -339,7 +334,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
     >
       <canvas ref={canvasRef} aria-hidden="true" />
       {phase !== 'veil' && Q ? (
-        <div className={'qi-dom' + (finalRef.current ? ' is-final' : '')}>
+        <div className="qi-dom">
           <header className="qi-head">
             <p className="qi-eyebrow">卦已成 · 解读之前</p>
           </header>
@@ -347,7 +342,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
             <p className="tq-step-no">{Q.title}</p>
             <h3 className="tq-ask qi-ink-chars">
               {[...Q.ask].map((ch, i) => (
-                <span key={i} className="tq-char" style={{ animationDelay: 160 + i * 55 + 'ms' }}>
+                <span key={i} className="tq-char" style={{ animationDelay: 650 + i * 95 + 'ms' }}>
                   {ch}
                 </span>
               ))}
@@ -359,7 +354,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
                   <button
                     type="button"
                     className="tq-opt qi-appear"
-                    style={{ animationDelay: 520 + i * 95 + 'ms' }}
+                    style={{ animationDelay: 1500 + i * 140 + 'ms' }}
                     onClick={() => pick(Q.key, o.id)}
                   >
                     <span className="tq-opt-key" aria-hidden="true">{i + 1}</span>
@@ -376,9 +371,6 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
                 <span key={qq.key} className={'tq-dot' + (answers[qq.key] ? ' is-on' : '')} />
               ))}
             </div>
-            <button type="button" className="tq-skip" onClick={skip}>
-              不答，直接起卦
-            </button>
           </footer>
         </div>
       ) : null}
