@@ -55,10 +55,10 @@ export const QUESTIONS = [
     ask: '心之所向，在此卦之下，当行于何方？',
     hint: '择一贴近者即可，不必思虑过久',
     options: [
-      { id: 'advance', word: '进', desc: '进 — 顺势而前，不待万全' },
-      { id: 'hold', word: '守', desc: '守 — 据其成，不更其道' },
-      { id: 'turn', word: '转', desc: '转 — 易其途，另辟一径' },
-      { id: 'wait', word: '待', desc: '待 — 不争时，时至自来' },
+      { id: 'advance', word: '图进', desc: '进 — 顺势而前，不待万全' },
+      { id: 'hold', word: '持守', desc: '守 — 据其成，不更其道' },
+      { id: 'turn', word: '改途', desc: '转 — 易其途，另辟一径' },
+      { id: 'wait', word: '俟时', desc: '待 — 不争时，时至自来' },
     ],
   },
   {
@@ -66,10 +66,10 @@ export const QUESTIONS = [
     title: '二 · 此刻所阻',
     ask: '行之不易者，其要在己乎，在人乎？',
     options: [
-      { id: 'self', word: '心', desc: '心 — 所碍者，在自己心里' },
-      { id: 'other', word: '人', desc: '人 — 所碍者，在他人处' },
-      { id: 'time', word: '时', desc: '时 — 所碍者，时未到' },
-      { id: 'strength', word: '力', desc: '力 — 所碍者，力量不足' },
+      { id: 'self', word: '碍在心', desc: '心 — 所碍者，在自己心里' },
+      { id: 'other', word: '碍在人', desc: '人 — 所碍者，在他人处' },
+      { id: 'time', word: '碍在时', desc: '时 — 所碍者，时未到' },
+      { id: 'strength', word: '碍在力', desc: '力 — 所碍者，力量不足' },
     ],
   },
   {
@@ -77,10 +77,10 @@ export const QUESTIONS = [
     title: '三 · 此刻所需',
     ask: '所求者，近得之谓何？',
     options: [
-      { id: 'quick', word: '速', desc: '速 — 求快成，快则失稳' },
-      { id: 'steady', word: '定', desc: '定 — 求安稳，稳则致远' },
-      { id: 'deep', word: '深', desc: '深 — 求彻底，不求苟全' },
-      { id: 'open', word: '开', desc: '开 — 求转机，不守旧局' },
+      { id: 'quick', word: '期速', desc: '速 — 求快成，快则失稳' },
+      { id: 'steady', word: '期定', desc: '定 — 求安稳，稳则致远' },
+      { id: 'deep', word: '期深', desc: '深 — 求彻底，不求苟全' },
+      { id: 'open', word: '期开', desc: '开 — 求转机，不守旧局' },
     ],
   },
 ]
@@ -139,10 +139,18 @@ export function appendAnswers(base, answers) {
   //      不能说「守其人」（人不是可守的对象）。
   // 故按语义分两类：所向=动词（进/守/转/待）可直接带宾语；所阻=名词，只作「所碍在」。
   // 例：所向=守、所阻=心、所需=定 → 「守其行，所碍在心，以求定」
+  // ⭐ 每个词**自成一句**，不再套固定模板。
+  // 为什么改了三次：
+  //   ① 三个字硬拼「守心定」—— 不成话；
+  //   ② 套模板「欲守，所碍在心，以求定」—— 「欲守」缺宾语、「以求定」不成话；
+  //   ③ 词改成可嵌形态后，模板又与之打架（成了「欲守而」「以求期于定」）。
+  // 教训：**模板与词必须一起设计**，改一边就要重看另一边。
+  // 现在的做法：选项的 `word` 直接就是**能独立成句的短语**，
+  // 组句只负责用顿号连起来 —— 模板越少，出错面越小。
   const clauses = []
-  if (going) clauses.push(`欲${going}`)
-  if (blocked) clauses.push(`所碍在${blocked}`)
-  if (need) clauses.push(`以求${need}`)
+  if (going) clauses.push(going)
+  if (blocked) clauses.push(blocked)
+  if (need) clauses.push(need)
   if (!clauses.length) return base
   return `${base}此刻${clauses.join('，')}。`
 }
