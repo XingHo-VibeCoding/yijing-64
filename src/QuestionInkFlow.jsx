@@ -8,9 +8,9 @@ import { QUESTIONS } from './reading/threeQuestions.js'
  *   ① 点「起 一 卦」→ 白色雾气升腾铺满（**先让雾稳住，再出字**——此前 1.5s 就出题，
  *      雾未实、题面与首页内容重叠，用户截图指正）
  *   ② 雾面翻涌的背景上，问题以**黑色毛笔楷体**直接浮现（无底框、无衬底墨晕）
- *   ③ 每答完一题，**黑云翻涌汇集**（参考起卦动画的墨云观感：交错翻涌，不是纯色黑屏）
+ *   ③ 每答完一题，**白云气翻涌汇集**（不是黑墨、也不是纯色白屏——交错翻涌带淡墨阴影层次）
  *      → 散开时新问题的字逐个显影
- *   ④ 三问答完黑云再汇集，散开时进入起卦动画（遮满一瞬动画已在下层开播）
+ *   ④ 三问答完白云再汇集，散开时进入起卦动画（遮满一瞬动画已在下层开播）
  *
  * ============================================================
  * 结构约定（同族）：portal 到 body、单 canvas 单 rAF、确定性逐帧重绘、
@@ -24,9 +24,10 @@ import { QUESTIONS } from './reading/threeQuestions.js'
 
 const INK = '24, 20, 16'
 const PAPER = '247, 239, 224'
+const MIST = '252, 249, 242' // 亮白云团（比纸色更亮一档，翻涌时看得见）
 
-/* 时间轴（ms）——veil 加长：先让雾稳住再出字（用户指正「浮现太快导致重叠」） */
-const T_VEIL = 2200
+/* 时间轴（ms）——veil 再加长：雾要多翻涌一会儿、且浓到盖死底页（用户二轮指正） */
+const T_VEIL = 3200
 const T_COVER = 1400 // sweep：黑云遮满（换题/进动画点）
 const T_SWEEP_END = 2750 // sweep：散开完毕
 
@@ -51,6 +52,13 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
   const [inked, setInked] = useState(initPhase === 'sweep')
   const [leaving, setLeaving] = useState(initFinal)
   const finalRef = useRef(initFinal)
+  /* ⚠️ 挡严实（用户二轮指正）：mount 后立刻开始把 CSS 底铺向纸色（0.8s 内），
+   * 不等 veil 翻涌完 —— 底页**一刻都不许透出来**；雾的升腾感由 canvas 在纸色上继续翻涌 */
+  const [cover, setCover] = useState(initPhase === 'ask' || initPhase === 'sweep')
+  useEffect(() => {
+    const t = setTimeout(() => setCover(true), 60)
+    return () => clearTimeout(t)
+  }, [])
 
   const cbRef = useRef({})
   cbRef.current = { onAllAnswered, onExit }
@@ -103,21 +111,22 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
 
     /* ---------- 白雾团：veil 升腾 + idle 常驻翻涌（更亮的白，纸面上可见） ---------- */
     const mist = []
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 30; i++) {
       mist.push({
         bx: Math.random(), // 比例坐标（resize 重投影）
         y0: H + 40 + Math.random() * H * 0.5,
-        r: (110 + Math.random() * 170) * (W / 1440),
+        r: (150 + Math.random() * 230) * (W / 1440), // 更大——大面积叠盖
         v: (0.26 + Math.random() * 0.3) * H,
         sway: 24 + Math.random() * 52,
         ph: Math.random() * Math.PI * 2,
-        a: 0.3 + Math.random() * 0.3,
-        delay: Math.random() * 400,
+        a: 0.5 + Math.random() * 0.38, // 更浓
+        delay: Math.random() * 500,
       })
     }
 
-    /* ---------- 黑云团：sweep 翻涌（参考起卦动画观感：交错扰动、遮满后仍缓滚） ----------
-     * 每团带 3 个偏移子团，子团绕母心慢转 → 碎云翻涌感，不是一颗颗圆球直线上升 */
+    /* ---------- 白云团：sweep 翻涌（用户二轮指正：不要黑墨，改白色云气） ----------
+     * 每团带 3 个偏移子团，子团绕母心慢转 → 碎云翻涌感；
+     * 白底上纯白不可见，故每团随附一朵**淡墨阴影云**（低alpha）压在下面出层次 */
     const surge = []
     for (let i = 0; i < 14; i++) {
       const kids = []
@@ -136,7 +145,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
         v: H * (0.0005 + Math.random() * 0.0003),
         sway: 22 + Math.random() * 40,
         ph: Math.random() * Math.PI * 2,
-        a: 0.2 + Math.random() * 0.14,
+        a: 0.5 + Math.random() * 0.3, // 白云要浓
         delay: Math.random() * 500,
         kids,
         roll: (Math.random() - 0.5) * 0.0012, // 母团自转
@@ -151,17 +160,15 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
     let exited = false
     let raf = 0
 
-    /** 画一朵「碎云」：母团 + 绕行子团，各自呼吸（软边径向渐变叠加） */
-    function drawCloud(x, y, r, alpha, t, c) {
+    /** 画一朵「碎云」：母团 + 绕行子团，各自呼吸（软边径向渐变叠加）。rgb 决定云色 */
+    function drawCloud(x, y, r, alpha, t, c, rgb) {
       if (alpha <= 0.012) return
       const spin = t * c.roll
-      const cs = Math.cos(spin)
-      const sn = Math.sin(spin)
       // 母团
       let g = ctx.createRadialGradient(x, y, 0, x, y, r)
-      g.addColorStop(0, `rgba(${INK}, ${alpha})`)
-      g.addColorStop(0.6, `rgba(${INK}, ${alpha * 0.62})`)
-      g.addColorStop(1, `rgba(${INK}, 0)`)
+      g.addColorStop(0, `rgba(${rgb}, ${alpha})`)
+      g.addColorStop(0.6, `rgba(${rgb}, ${alpha * 0.62})`)
+      g.addColorStop(1, `rgba(${rgb}, 0)`)
       ctx.fillStyle = g
       ctx.beginPath()
       ctx.arc(x, y, r, 0, Math.PI * 2)
@@ -175,9 +182,9 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
         const kr = r * k.r
         const ka2 = alpha * 0.8
         g = ctx.createRadialGradient(kx, ky, 0, kx, ky, kr)
-        g.addColorStop(0, `rgba(${INK}, ${ka2})`)
-        g.addColorStop(0.6, `rgba(${INK}, ${ka2 * 0.6})`)
-        g.addColorStop(1, `rgba(${INK}, 0)`)
+        g.addColorStop(0, `rgba(${rgb}, ${ka2})`)
+        g.addColorStop(0.6, `rgba(${rgb}, ${ka2 * 0.6})`)
+        g.addColorStop(1, `rgba(${rgb}, 0)`)
         ctx.fillStyle = g
         ctx.beginPath()
         ctx.arc(kx, ky, kr, 0, Math.PI * 2)
@@ -194,6 +201,23 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
       /* ---------- veil：白雾升腾（雾稳住后才转 ask——用户指正的重叠根因） ---------- */
       if (mode === 'veil') {
         const t = el / 1000
+        /* 淡墨阴影雾先走一遍：大面积白里出明暗，翻涌才看得见（用户二轮指正「加深浓度」） */
+        for (const b of mist) {
+          const lt = Math.max(0, el - b.delay - 200)
+          if (lt <= 0) continue
+          const y = b.y0 - b.v * (lt / 1000) - easeOutCubic(clamp01(lt / 2600)) * H * 0.35
+          if (y < -b.r) continue
+          const x = px(b.bx) + Math.sin(t * 0.7 + b.ph) * b.sway
+          const a = b.a * clamp01(lt / 500) * 0.12
+          if (a <= 0.01) continue
+          const g = ctx.createRadialGradient(x, y, 0, x, y, b.r)
+          g.addColorStop(0, `rgba(${INK}, ${a})`)
+          g.addColorStop(1, `rgba(${INK}, 0)`)
+          ctx.fillStyle = g
+          ctx.beginPath()
+          ctx.arc(x, y, b.r, 0, Math.PI * 2)
+          ctx.fill()
+        }
         for (const b of mist) {
           const lt = Math.max(0, el - b.delay)
           if (lt <= 0) continue
@@ -261,24 +285,34 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
         const outP = clamp01((sp - T_COVER) / (T_SWEEP_END - T_COVER))
         const live = 1 - easeInOutCubic(outP)
         const surgeP = clamp01(sp / (T_COVER * 0.85))
+        /* 淡墨阴影云先铺一层（白底上白云才可见：翻涌的明暗层次靠它） */
         for (const c of surge) {
           if (sp < c.delay) continue
           const prog = (sp - c.delay) * c.v
-          /* 遮满前：自下涌上；遮满后：在屏内原地缓滚（翻涌不是死黑） */
           let y
           if (prog < H + c.r) y = H + c.r - prog
           else y = ((prog - (H + c.r)) % (H * 0.5)) * 0.2 + H * 0.25
           const x = px(c.bx) + Math.sin(sp / 700 + c.ph) * c.sway
-          const env = sp < T_COVER
-            ? clamp01(prog / (c.r * 1.2))
-            : 1
-          const a = c.a * env * (0.4 + 0.6 * surgeP) * live
-          drawCloud(x, y, c.r * (0.9 + 0.25 * surgeP), a, sp, c)
+          const env = sp < T_COVER ? clamp01(prog / (c.r * 1.2)) : 1
+          const a = c.a * env * (0.4 + 0.6 * surgeP) * live * 0.22
+          drawCloud(x, y, c.r * (0.9 + 0.25 * surgeP), a, sp, c, INK)
         }
-        /* 兜底墨面：涌起后半段补实（保证换题藏在墨下）；散开段整体变淡上飘 */
-        const veilA = 0.94 * easeInOutCubic(clamp01((sp - 350) / (T_COVER - 350))) * live
+        /* 白云主体压上 */
+        for (const c of surge) {
+          if (sp < c.delay) continue
+          const prog = (sp - c.delay) * c.v
+          let y
+          if (prog < H + c.r) y = H + c.r - prog
+          else y = ((prog - (H + c.r)) % (H * 0.5)) * 0.2 + H * 0.25
+          const x = px(c.bx) + Math.sin(sp / 700 + c.ph) * c.sway
+          const env = sp < T_COVER ? clamp01(prog / (c.r * 1.2)) : 1
+          const a = c.a * env * (0.4 + 0.6 * surgeP) * live
+          drawCloud(x, y, c.r * (0.9 + 0.25 * surgeP), a, sp, c, MIST)
+        }
+        /* 兜底雾面：涌起后半段补实（保证换题藏在云下）；散开段整体变淡上飘 */
+        const veilA = 0.97 * easeInOutCubic(clamp01((sp - 350) / (T_COVER - 350))) * live
         if (veilA > 0.01) {
-          ctx.fillStyle = `rgba(${INK}, ${veilA})`
+          ctx.fillStyle = `rgba(${PAPER}, ${veilA})`
           ctx.fillRect(0, -easeInOutCubic(outP) * H * 0.22, W, H)
         }
         if (!covered && sp >= T_COVER && FREEZE == null) {
@@ -323,6 +357,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
     <div
       className={
         'qi-stage' +
+        (cover ? ' is-cover' : '') +
         (veiled ? ' is-paper' : '') +
         (inked ? ' is-inked' : '') +
         (leaving ? ' is-final' : '')
