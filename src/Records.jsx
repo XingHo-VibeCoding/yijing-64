@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import hexData from '../data/64卦.json'
 import SourceTag from './SourceTag.jsx'
 import * as store from './storage.js'
+import { verdictLine } from './reading/verdict.js'
 
 const ITEM = (id) => hexData.items.find((h) => h.id === id)
 const ORDER = ['初', '二', '三', '四', '五', '上']
@@ -210,6 +211,8 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
                 const hex = ITEM(r.hexagramId)
                 if (!hex) return null
                 const changing = yaoLabels(hex, r.changingLines)
+                // 每日短评：逐卦专属、≤30 字、同卦每次固定一句（非随机）
+                const verdict = verdictLine(hex)
                 return (
                   <li key={r.date}>
                     <button type="button" className="rec-item" onClick={() => onOpen(hex.id)}>
@@ -223,6 +226,9 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
                         {changing ? <span className="rec-changing">变爻 {changing}</span> : null}
                       </div>
                       <p className="rec-judgment">{hex.judgment}</p>
+                      {verdict ? (
+                        <p className="rec-verdict">{verdict}</p>
+                      ) : null}
                     </button>
                   </li>
                 )
