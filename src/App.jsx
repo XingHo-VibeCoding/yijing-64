@@ -4,7 +4,7 @@ import data from '../data/64卦.json'
 import yaoData from '../data/64卦-爻辞.json'
 import HexagramFigure from './HexagramFigure.jsx'
 import CastingAnimation from './CastingAnimation.jsx'
-import ThreeQuestions from './ThreeQuestions.jsx'
+import QuestionInkFlow from './QuestionInkFlow.jsx'
 import Records from './Records.jsx'
 import RestoreNotice from './RestoreNotice.jsx'
 import Quiz from './Quiz.jsx'
@@ -92,7 +92,7 @@ export default function App() {
   const [currentId, setCurrentId] = useState(null)
   const [casting, setCasting] = useState(null)   // { id, changing, archived, answers }
   const [castSeq, setCastSeq] = useState(0)      // 作为 key：保证「再起一卦」真的从头播
-  const [pendingCast, setPendingCast] = useState(null) // 出卦后、结果页前的三问浮层
+  const [questionFlow, setQuestionFlow] = useState(null) // 起卦动画**之前**的水墨三问（{id, changing, archived}）
   const [answers, setAnswers] = useState(null)   // 三问作答（仅本次解读用，不入库）
   const [highlightId, setHighlightId] = useState(null)
   const [view, setView] = useState('list')       // 'list' | 'records'
@@ -172,27 +172,38 @@ export default function App() {
     const c = castOnce()
     // 每天的第一卦自动存档；今天已有记录则本卦不入档（PRD F8）
     const archived = store.archiveFirstOfToday(c.id, c.changing)
-    setCastSeq((n) => n + 1)
-    setCasting({ ...c, archived })
-    // ⚠️ 先落三问，再进结果页 —— 见 ThreeQuestions 的设计要点①：
-    //    三问只影响「解读怎么写」，不影响「卦是什么」。
-    // `?cast=` 深链（截图与分享用）**跳过三问**：它要的是稳定可复现，
-    //    加一层需要点按的浮层会让截图链路又卡住。
-    const sp = new URLSearchParams(window.location.search)
-    if (sp.has('cast')) {
-      setAnswers(null)
-    } else {
-      setPendingCast({ ...c, archived })
-    }
     bump()
+    // ⚠️ 流程（Day 22 重做，用户指定分镜）：点起卦 → 白雾铺面 → 水墨三问 →
+    //    墨散开时**才进入起卦动画** → 结果页。卦在点按钮这刻已由 castOnce 定死，
+    //    三问只影响「解读怎么写」，不影响「卦是什么」。
+    // `?cast=` 深链（截图与分享用）**跳过三问**：它要的是稳定可复现。
+    const sp = new URLSearchParams(window.location.search)
+    /* ?cast= 深链默认跳过三问；但组合 ?tqDemo=1 时保留三问 ——
+       调试/截图用：主 frame 直达三问相位（配合 ?tqPhase / ?transFreeze），不用 iframe 探针 */
+    if (sp.has('cast') && !sp.has('tqDemo')) {
+      setCastSeq((n) => n + 1)
+      setAnswers(null)
+      setCasting({ ...c, archived, answers: null })
+    } else {
+      setQuestionFlow({ id: c.id, changing: c.changing, archived })
+    }
   }
 
-  /** 三问作答完毕（或跳过）→ 带上作答进结果页 */
-  const finishQuestions = useCallback((a) => {
-    setCasting((prev) => (prev ? { ...prev, answers: a && Object.keys(a).length ? a : null } : prev))
-    setPendingCast(null)
-    setAnswers(a && Object.keys(a).length ? a : null)
+  /** 三问墨涌遮满 → 起卦动画在下层开播（overlay 继续盖着播墨散） */
+  const beginCastUnderQuestions = useCallback((a) => {
+    setQuestionFlow((qf) => {
+      if (qf) {
+        setCastSeq((n) => n + 1)
+        const clean = a && Object.keys(a).length ? a : null
+        setAnswers(clean)
+        setCasting({ id: qf.id, changing: qf.changing, archived: qf.archived, answers: clean })
+      }
+      return qf
+    })
   }, [])
+
+  /** 三问墨散尽 → 卸载 overlay，露出起卦动画 */
+  const dismissQuestions = useCallback(() => setQuestionFlow(null), [])
 
   /* 深链：地址栏带 `?cast=<卦序>` 时自动起一次卦（配合 `?castSpeed=` 与 `?openReading=1`）。
    * 用途是**可分享某一卦的解读**与稳定截图 —— 此前截图每次都不一样，因为起卦用
@@ -315,9 +326,7 @@ export default function App() {
   // ⚠️ 三问浮层优先于结果页：出卦后先问，问完（或跳过）才进解读。
   //    这样「卦是什么」与「解读怎么说」在流程上就分开了 ——
   //    用户不能通过选择来改变今天的卦，只能改变解读的语气与落点。
-  if (pendingCast) {
-    viewNode = <ThreeQuestions onDone={finishQuestions} />
-  } else if (casting) {
+  if (casting) {
     const target = data.items.find((h) => h.id === casting.id)
     viewNode = (
       <CastingAnimation
@@ -765,6 +774,10 @@ export default function App() {
   return (
     <>
       {viewNode}
+      {/* 水墨三问：盖在一切之上。遮满时起卦动画在下层开播，墨散尽本组件卸载 */}
+      {questionFlow && (
+        <QuestionInkFlow onAllAnswered={beginCastUnderQuestions} onExit={dismissQuestions} />
+      )}
       <RestoreNotice />
       {overlay}
       {mist}

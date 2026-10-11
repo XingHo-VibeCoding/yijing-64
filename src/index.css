@@ -1698,33 +1698,56 @@ body {
    设计意图：像一枚压在案上的问笺 —— 宣纸底、墨框、竖向留白。
    玄妙靠**语体**（文言腔），不靠视觉特效；不做发光、不做渐变。
    ============================================================ */
-.tq-mask {
-  position: fixed; inset: 0; z-index: 90;
-  display: flex; align-items: center; justify-content: center;
-  padding: 24px 18px;
-  background: rgba(28, 22, 14, .58);
-}
-.tq-box {
-  width: 100%; max-width: 560px;
-  padding: 26px 28px 20px;
-  background: #f7efe0;
-  border: 1px solid #b99a63;
-  border-radius: 4px;
-  box-shadow: 0 18px 46px rgba(20, 14, 6, .38);
+/* ── 水墨三问（Day 22 重做）：全屏画布 + 逐字墨迹显影 ── */
+.qi-stage {
+  position: fixed; inset: 0; z-index: 95;
   color: #2c2419;
   font-family: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "SimSun-ExtB", "STSong", serif;
-  animation: tq-in .42s ease-out both;
+  /* 底色状态机（CSS 承担纸面与遮满/散开过渡，canvas 只画流动云墨增强质感）：
+     veil 完成 → is-paper 纸面；sweep → is-inked 墨遮满；final → is-final 淡出露动画 */
+  background-color: transparent;
+  transition: background-color 1s ease-in-out, opacity 1.1s ease-in-out;
 }
-@keyframes tq-in {
-  from { opacity: 0; transform: translateY(14px) scale(.985); }
-  to   { opacity: 1; transform: none; }
+.qi-stage.is-paper { background-color: rgba(247, 239, 224, .97); }
+.qi-stage.is-inked { background-color: rgba(24, 20, 16, .96); }
+.qi-stage.is-final {
+  background-color: rgba(24, 20, 16, 0);
+  opacity: 0;
+  pointer-events: none;
 }
-.tq-eyebrow { margin: 0; font-size: 12px; letter-spacing: .16em; color: #8a6a38; }
-.tq-title {
-  margin: 4px 0 8px; font-size: 27px; letter-spacing: .22em; color: #2c2419;
+.qi-stage canvas { position: absolute; inset: 0; display: block; }
+.qi-dom {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  padding: 15vh clamp(20px, 6vw, 84px) 26px;
+  max-width: 720px; margin: 0 auto;
+  transition: opacity .5s ease;
 }
-.tq-lead { margin: 0 0 20px; font-size: 13.5px; line-height: 1.9; color: #5a4a32; }
-.tq-lead b { color: #7a4a10; }
+.qi-stage.is-inked .qi-dom { opacity: 0; } /* 墨盖上来时，内容先行淡出 */
+.qi-eyebrow { margin: 0 0 30px; font-size: 12px; letter-spacing: .18em; color: #8a6a38; }
+
+/* 逐字墨迹显影：模糊+晕影 → 清晰收干（「水墨形式浮现」） */
+.tq-char {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(7px);
+  text-shadow: 0 0 14px rgba(24, 20, 16, .55);
+  animation: tq-char-in .62s ease-out forwards;
+  white-space: pre;
+}
+@keyframes tq-char-in {
+  to { opacity: 1; filter: blur(0); text-shadow: 0 0 0 rgba(24, 20, 16, 0); }
+}
+/* 选项卡依次洇出 */
+.qi-appear {
+  opacity: 0;
+  filter: blur(5px);
+  transform: translateY(9px);
+  animation: qi-opt-in .55s ease-out forwards;
+}
+@keyframes qi-opt-in {
+  to { opacity: 1; filter: blur(0); transform: none; }
+}
 
 .tq-step-no { margin: 0; font-size: 13px; letter-spacing: .12em; color: #8a6a38; }
 .tq-ask {
@@ -1793,7 +1816,6 @@ body {
 .cr-shortlayer { margin-top: 20px; }
 
 @media (max-width: 430px) {
-  .tq-box { padding: 20px 18px 16px; }
   .tq-ask { font-size: 17px; }
   .tq-opt { padding: 10px 11px; gap: 9px; }
   .tq-opt-desc { font-size: 13px; }
