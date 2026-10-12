@@ -1700,7 +1700,11 @@ body {
    ============================================================ */
 /* ── 水墨三问（Day 22 重做）：全屏画布 + 逐字墨迹显影 ── */
 .qi-stage {
-  position: fixed; inset: 0; z-index: 95;
+  /* ⚠️ z-index 必须**高于起卦动画的 .cast-root（200）**——
+   * 黑云衔接段全程靠这一层盖在动画之上，墨散开才「让出」动画。
+   * 原来只有 95，动画一挂载就浮到墨云之上（z-index 200 > 95），
+   * 衔接直接变成「动画跳出来盖住墨」，正是用户指正的生硬根因。 */
+  position: fixed; inset: 0; z-index: 260;
   color: #2c2419;
   font-family: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "SimSun-ExtB", "STSong", serif;
   /* 底色状态机（CSS 承担纸面与遮满/散开过渡，canvas 只画流动云墨增强质感）：
@@ -1719,10 +1723,21 @@ body {
   background-color: rgba(250, 247, 240, 1);
   transition: background-color 1.3s ease-out, opacity 1.1s ease-in-out;
 }
+/* ── 三问 → 起卦动画的黑云衔接（用户指正「衔接太生硬」）──
+ * ⚠️ 底色**保持浅纸色不变**：黑云要画在浅底上才看得见翻涌 ——
+ *    压成深墨底会让「黑云画在黑底上」= 一块死黑（踩过一次，截图里只剩一片灰雾）。
+ *    起卦动画的墨也正是画在自己的纸底上，才有交错翻涌的层次。
+ * 墨的浓淡完全交给 canvas（遮盖度 cov 与墨云同一时间轴），
+ * 底色只在最后 is-final 一段平缓淡出，露出同样是纸底的动画 —— 无缝。 */
+.qi-stage.is-handoff {
+  background-color: rgba(247, 239, 224, 1);
+  transition: opacity 1.5s ease-in-out;
+}
 .qi-stage.is-final {
-  background-color: rgba(24, 20, 16, 0);
+  background-color: rgba(20, 17, 13, 0);
   opacity: 0;
   pointer-events: none;
+  transition: background-color 1.3s ease-in-out, opacity 1.5s ease-in-out;
 }
 .qi-stage canvas { position: absolute; inset: 0; display: block; }
 .qi-dom {

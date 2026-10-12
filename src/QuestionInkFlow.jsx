@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { QUESTIONS } from './reading/threeQuestions.js'
+/* ⭐ 直接复用起卦动画的那份墨点纹理 —— 与 CastingAnimation / InkTransition 同一种墨，
+ * 衔接段的墨与动画内部的墨才是「同一种」，观感才连得上。
+ * 曾用径向渐变云代替，结果聚成一块死黑、完全看不出翻涌。 */
+import { makeDotTexture } from './CastingAnimation.jsx'
 
 /**
  * 起卦三问 · 水墨全屏转场 v2（Day 22 用户复核后重做）：
@@ -10,7 +14,9 @@ import { QUESTIONS } from './reading/threeQuestions.js'
  *   ② 雾面翻涌的背景上，问题以**黑色毛笔楷体**直接浮现（无底框、无衬底墨晕）
  *   ③ 每答完一题，**白云气翻涌汇集**（不是黑墨、也不是纯色白屏——交错翻涌带淡墨阴影层次）
  *      → 散开时新问题的字逐个显影
- *   ④ 三问答完白云再汇集，散开时进入起卦动画（遮满一瞬动画已在下层开播）
+ *   ④ 三问答完白云再汇集 → **黑云翻涌衔接**（照起卦动画「一二段之间」那段的观感：
+ *      极坐标绕心翻涌、向心收拢遮严实、保持片刻、再墨散开）→ 露出起卦动画
+ *      （动画在墨涌住的保持段开播，散开时正播到第一段旋转中段）
  *
  * ============================================================
  * 结构约定（同族）：portal 到 body、单 canvas 单 rAF、确定性逐帧重绘、
@@ -28,8 +34,14 @@ const MIST = '252, 249, 242' // 亮白云团（比纸色更亮一档，翻涌时
 
 /* 时间轴（ms）——veil 再加长：雾要多翻涌一会儿、且浓到盖死底页（用户二轮指正） */
 const T_VEIL = 3200
-const T_COVER = 1400 // sweep：黑云遮满（换题/进动画点）
+const T_COVER = 1400 // sweep：白云遮满（换题 / 进衔接点）
 const T_SWEEP_END = 2750 // sweep：散开完毕
+/* handoff：三问→起卦动画的黑云衔接（用户指正「衔接太生硬」）
+ * 参数照 CastingAnimation 的 inkIn 800 / hold 1000 / inkOut 800 等比放大，
+ * 保证「墨涌上来 → 保持 → 墨散去」的节奏与起卦动画内部转场同源 */
+const T_HANDOFF_IN = 1150 // 墨涌上来（白雾 → 黑墨）
+const T_HANDOFF_HOLD = 850 // 保持（动画在这段开播）
+const T_HANDOFF_OUT = 1250 // 墨散开，露出动画
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v))
 const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
@@ -51,6 +63,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
   const [veiled, setVeiled] = useState(initPhase === 'ask' || initPhase === 'sweep')
   const [inked, setInked] = useState(initPhase === 'sweep')
   const [leaving, setLeaving] = useState(initFinal)
+  const [handoff, setHandoff] = useState(false) // 黑云衔接段（白雾 → 墨 → 露动画）
   const finalRef = useRef(initFinal)
   /* ⚠️ 挡严实（用户二轮指正）：mount 后立刻开始把 CSS 底铺向纸色（0.8s 内），
    * 不等 veil 翻涌完 —— 底页**一刻都不许透出来**；雾的升腾感由 canvas 在纸色上继续翻涌 */
@@ -69,6 +82,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
   /* canvas 模式：veil | idle | sweep（⚠️ DOM 的 phase=ask 对应 canvas 的 idle——值域映射） */
   const modeRef = useRef(initPhase === 'sweep' ? 'sweep' : initPhase === 'ask' ? 'idle' : 'veil')
   const sweepStartRef = useRef(0)
+  const handoffStartRef = useRef(0)
 
   const pick = (qKey, optId) => {
     const next = { ...answersRef.current, [qKey]: optId }
@@ -152,12 +166,51 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
       })
     }
 
+    /* ---------- 黑墨团：handoff 衔接段 ----------
+     * 照 CastingAnimation.drawInk 的观感：**极坐标绕心翻涌** —— 每团有自己的角速度 w
+     * （少数反向）与径向呼吸（surgeSp/surgeAmp），并随遮盖度向心收拢（kConv），
+     * 不是几颗圆球直线上升 */
+    const dot = makeDotTexture(128)
+    const ink = []
+    for (let i = 0; i < 22; i++) {
+      const far = i / 21 // 0 内圈 → 1 外圈
+      const rr = 0.16 + far * 0.62 + Math.random() * 0.1
+      const rad = (60 + Math.random() * 60) * (W / 1440) * (0.75 + far * 0.5)
+      const dots = []
+      const nDots = 5 + Math.floor(Math.random() * 4)
+      for (let k = 0; k < nDots; k++) {
+        const ta = Math.random() * Math.PI * 2
+        const td = rad * (0.35 + Math.random() * 0.62)
+        dots.push({
+          dx: Math.cos(ta) * td,
+          dy: Math.sin(ta) * td * 0.8,
+          s: 0.28 + Math.random() * 0.62,
+          a: 0.2 + Math.random() * 0.5,
+        })
+      }
+      ink.push({
+        rr,
+        a0: Math.random() * Math.PI * 2,
+        /* 内圈快、外圈慢、约三成反向 → 交错翻涌（照 CastingAnimation 的取法） */
+        w: (0.00034 + Math.random() * 0.00072) * (Math.random() < 0.3 ? -1 : 1) * (1 - far * 0.42),
+        surgeSp: 0.0004 + Math.random() * 0.0007,
+        surgeAmp: 0.05 + Math.random() * 0.12,
+        bph: Math.random() * Math.PI * 2,
+        bp: 0.0006 + Math.random() * 0.001,
+        rad,
+        base: 0.5 + Math.random() * 0.34,
+        dots,
+      })
+    }
+
     const px = (ratio) => ratio * W
 
     const t0 = performance.now()
     let veilDone = false
     let covered = false
     let exited = false
+    let castStarted = false
+    let cleared = false
     let raf = 0
 
     /** 画一朵「碎云」：母团 + 绕行子团，各自呼吸（软边径向渐变叠加）。rgb 决定云色 */
@@ -173,8 +226,8 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
       ctx.beginPath()
       ctx.arc(x, y, r, 0, Math.PI * 2)
       ctx.fill()
-      // 子团：绕母心慢转 + 呼吸 → 翻涌的碎云
-      for (const k of c.kids) {
+      // 子团：绕母心慢转 + 呼吸 → 翻涌的碎云（无子团时即整团软边云）
+      for (const k of c.kids || []) {
         const ka = k.ang + t * k.w
         const rr2 = r * k.rr * (1 + Math.sin(t * 0.0011 + k.ang * 3) * 0.18)
         const kx = x + Math.cos(ka) * rr2
@@ -318,23 +371,83 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
         if (!covered && sp >= T_COVER && FREEZE == null) {
           covered = true
           setInked(true)
-          if (finalRef.current) {
-            setLeaving(true)
-            cbRef.current.onAllAnswered && cbRef.current.onAllAnswered(answersRef.current)
-          } else {
+          if (!finalRef.current) {
             setStep((s) => Math.min(s + 1, QUESTIONS.length - 1))
           }
         }
         if (sp >= T_SWEEP_END && FREEZE == null) {
           if (finalRef.current && !exited) {
+            /* 换题是「白云散开露出新题」；三问答完则**接力给黑云衔接段**，
+             * 由它负责把白雾过渡到起卦动画（此前这里直接卸载 → 衔接生硬） */
             exited = true
-            cbRef.current.onExit && cbRef.current.onExit()
-            return
+            modeRef.current = 'handoff'
+            handoffStartRef.current = performance.now()
+            setPhase('handoff')
+            setHandoff(true)
+          } else {
+            covered = false
+            modeRef.current = 'idle'
+            setPhase('ask')
+            setInked(false)
           }
-          covered = false
-          modeRef.current = 'idle'
-          setPhase('ask')
-          setInked(false)
+        }
+      }
+
+      /* ---------- handoff：黑云翻涌衔接（白雾 → 墨 → 露出起卦动画） ---------- */
+      if (mode === 'handoff') {
+        const hp = performance.now() - handoffStartRef.current
+        const holdEnd = T_HANDOFF_IN + T_HANDOFF_HOLD
+        const inP = clamp01(hp / T_HANDOFF_IN)
+        const outP = clamp01((hp - holdEnd) / T_HANDOFF_OUT)
+        /* 遮盖度：涌上 → 保持 1 → 散去。CSS 底色同步走（is-handoff 深墨 → is-final 透明），
+         * **底色与墨云同步淡**，不出现「墨散了但底色还黑着」的断层 */
+        const cov = hp <= holdEnd ? easeInOutCubic(inP) : 1 - easeInOutCubic(outP)
+        if (cov > 0.005) {
+          const cx = W / 2
+          const cy = H / 2
+          const kConv = 1 - cov * 0.38 // 遮得越实，墨团越向心收拢（不收到死黑）
+          for (const b of ink) {
+            const rr =
+              b.rr * Math.min(W, H) * (1 + Math.sin(hp * b.surgeSp + b.bph) * b.surgeAmp) * kConv
+            const ang = b.a0 + hp * b.w
+            const bx = cx + Math.cos(ang) * rr
+            const by = cy + Math.sin(ang) * rr * 0.96
+            const sc = (1 + Math.sin(hp * b.bp + b.bph) * 0.24) * (1 + cov * 0.3)
+            ctx.globalAlpha = Math.min(1, b.base * cov)
+            for (const d of b.dots) {
+              const px2 = bx + d.dx * sc
+              const py2 = by + d.dy * sc
+              const pr = b.rad * d.s * sc
+              ctx.drawImage(dot, px2 - pr, py2 - pr, pr * 2, pr * 2)
+            }
+          }
+          ctx.globalAlpha = 1
+          /* 兜底墨面：**中心浓、边缘留空**的径向铺底（不能一整块平涂 ——
+           * 平涂会把翻涌抹平成死黑，起卦动画的墨也是靠中心最浓、外缘仍留墨在翻涌） */
+          const gv = ctx.createRadialGradient(
+            W / 2, H / 2, 0,
+            W / 2, H / 2, Math.max(W, H) * 0.62
+          )
+          const peak = Math.min(0.9, cov * 0.9)
+          gv.addColorStop(0, `rgba(${INK}, ${peak})`)
+          gv.addColorStop(0.5, `rgba(${INK}, ${peak * 0.8})`)
+          gv.addColorStop(0.8, `rgba(${INK}, ${peak * 0.3})`)
+          gv.addColorStop(1, `rgba(${INK}, ${peak * 0.06})`)
+          ctx.fillStyle = gv
+          ctx.fillRect(0, 0, W, H)
+        }
+        /* 动画在「保持段」开播：此刻墨已遮严实，下层起卦动画从第一段旋转开始跑，
+         * 等墨散开时正好播到中段 —— 观感上像墨散开「让出」了动画 */
+        if (!castStarted && hp >= T_HANDOFF_IN * 0.45) {
+          castStarted = true
+          cbRef.current.onAllAnswered && cbRef.current.onAllAnswered(answersRef.current)
+        }
+        if (hp >= holdEnd + T_HANDOFF_OUT && FREEZE == null && !cleared) {
+          cleared = true
+          setLeaving(true) // CSS 底色与整体透明度平缓淡出（1.5s）
+          setTimeout(() => {
+            cbRef.current.onExit && cbRef.current.onExit()
+          }, 1500)
         }
       }
 
@@ -360,6 +473,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
         (cover ? ' is-cover' : '') +
         (veiled ? ' is-paper' : '') +
         (inked ? ' is-inked' : '') +
+        (handoff ? ' is-handoff' : '') +
         (leaving ? ' is-final' : '')
       }
       data-tq-phase={phase}
