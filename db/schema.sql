@@ -226,6 +226,10 @@ alter table public.gilded add  constraint gilded_hexagram_ids_check
 -- 4. 行级权限（RLS）：每个人只能看见和改自己的行
 -- ----------------------------------------------------------------------------
 -- RLS 是**真正的闸门**；表级授权（§6）给得宽一些也无妨，策略会把它收回来。
+-- ⚠️ 写策略（INSERT/UPDATE）额外收紧 `and current_uid() <> 'anon'::text`：清掉本地
+--    持久化的访客其 JWT sub 会退化成 Publishable Key 的固定身份 'anon'，auth.uid() 此时
+--    返回字符串 'anon'，原 `(uid = current_uid())` 两边都是字面量 'anon' 会误放行造成串号。
+--    该收紧由迁移 20261013020000 落到线上，这里同步正本（auth.uid() 为 NULL 时 uid=NULL 本就 false，不影响）。
 alter table public.divination_records enable row level security;
 alter table public.favorites          enable row level security;
 alter table public.study_progress     enable row level security;
@@ -247,7 +251,7 @@ create policy "read own records"   on public.divination_records
   for select using (uid = public.current_uid());
 
 create policy "insert own records" on public.divination_records
-  for insert with check (uid = public.current_uid());
+  for insert with check (uid = public.current_uid() and public.current_uid() <> 'anon'::text);
 
 create policy "delete own records" on public.divination_records
   for delete using (uid = public.current_uid());
@@ -264,7 +268,7 @@ create policy "read own favorites"   on public.favorites
   for select using (uid = public.current_uid());
 
 create policy "insert own favorites" on public.favorites
-  for insert with check (uid = public.current_uid());
+  for insert with check (uid = public.current_uid() and public.current_uid() <> 'anon'::text);
 
 create policy "delete own favorites" on public.favorites
   for delete using (uid = public.current_uid());
@@ -278,11 +282,11 @@ create policy "read own progress"   on public.study_progress
   for select using (uid = public.current_uid());
 
 create policy "insert own progress" on public.study_progress
-  for insert with check (uid = public.current_uid());
+  for insert with check (uid = public.current_uid() and public.current_uid() <> 'anon'::text);
 
 create policy "update own progress" on public.study_progress
-  for update using (uid = public.current_uid())
-              with check (uid = public.current_uid());
+  for update using (uid = public.current_uid() and public.current_uid() <> 'anon'::text)
+              with check (uid = public.current_uid() and public.current_uid() <> 'anon'::text);
 
 -- 5.4 成绩流水：只增不改（没有 UPDATE 策略）
 drop policy if exists "read own rounds"   on public.study_rounds;
@@ -292,7 +296,7 @@ create policy "read own rounds"   on public.study_rounds
   for select using (uid = public.current_uid());
 
 create policy "insert own rounds" on public.study_rounds
-  for insert with check (uid = public.current_uid());
+  for insert with check (uid = public.current_uid() and public.current_uid() <> 'anon'::text);
 
 -- 5.5 镀金成就：可读 / 可写，**刻意不建 DELETE 策略**
 drop policy if exists "read own gilded"   on public.gilded;
@@ -303,11 +307,11 @@ create policy "read own gilded"   on public.gilded
   for select using (uid = public.current_uid());
 
 create policy "insert own gilded" on public.gilded
-  for insert with check (uid = public.current_uid());
+  for insert with check (uid = public.current_uid() and public.current_uid() <> 'anon'::text);
 
 create policy "update own gilded" on public.gilded
-  for update using (uid = public.current_uid())
-              with check (uid = public.current_uid());
+  for update using (uid = public.current_uid() and public.current_uid() <> 'anon'::text)
+              with check (uid = public.current_uid() and public.current_uid() <> 'anon'::text);
 
 -- ⚠️ 「不建 DELETE 策略」是刻意的：镀金是**成就**，不是记录，
 --    永远不参与「清空我的记录」（契约 §四 · 6.2 同口径）。
