@@ -14,6 +14,13 @@ import MistTransition from './MistTransition.jsx'
 import QuizCeremony from './QuizCeremony.jsx'
 import * as store from './storage.js'
 import { fetchHexagrams, mockMode } from './mockApi.js'
+import { friendlyError } from './errorText.js'
+
+// 收藏失败：本地存储故障保留原有中文原因，其余（云端网络/服务端）走统一文案
+function favErrText(err) {
+  if (/本地存储|storage|localStorage/i.test((err && err.message) || '')) return '本地存储不可用'
+  return friendlyError(err)
+}
 
 const VOLUMES = [
   { key: '上经', range: '1–30' },
@@ -129,7 +136,7 @@ export default function App() {
     setList({ status: 'loading', items: [], error: '' })
     fetchHexagrams({ mode: mockMode() })
       .then((r) => setList({ status: 'ready', items: r.items, error: '' }))
-      .catch((e) => setList({ status: 'error', items: [], error: (e && e.message) || '未知错误' }))
+      .catch((e) => setList({ status: 'error', items: [], error: friendlyError(e) }))
   }, [])
   useEffect(() => {
     loadList()
@@ -313,7 +320,7 @@ export default function App() {
         setFavError('')
         bump()
       } catch (err) {
-        setFavError('收藏没有保存成功：' + (err && err.message ? err.message : '本地存储不可用') + '。请重试。')
+        setFavError('收藏没有保存成功：' + favErrText(err) + '。请重试。')
         window.clearTimeout(favErrTimer.current)
         favErrTimer.current = window.setTimeout(() => setFavError(''), 4000)
       } finally {
@@ -342,7 +349,7 @@ export default function App() {
             store.toggleFavorite(casting.id)
             bump()
           } catch (err) {
-            setFavError('收藏没有保存成功：' + (err && err.message ? err.message : '本地存储不可用'))
+            setFavError('收藏没有保存成功：' + favErrText(err))
           }
         }}
         onRecast={startCast}
@@ -414,7 +421,7 @@ export default function App() {
                 store.toggleFavorite(current.id)
                 bump()
               } catch (err) {
-                setFavError('收藏没有保存成功：' + (err && err.message ? err.message : '本地存储不可用'))
+                setFavError('收藏没有保存成功：' + favErrText(err))
               }
             }}
           >
@@ -546,7 +553,7 @@ export default function App() {
             store.toggleFavorite(id)
             bump()
           } catch (err) {
-            setFavError('收藏没有保存成功：' + (err && err.message ? err.message : '本地存储不可用'))
+            setFavError('收藏没有保存成功：' + favErrText(err))
           }
         }}
         onBack={() => {

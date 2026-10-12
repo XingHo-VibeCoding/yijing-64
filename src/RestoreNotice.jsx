@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as store from './storage.js'
+import { friendlyError } from './errorText.js'
 
 export default function RestoreNotice() {
   const [id, setId] = useState(() => store.identityStatus())
@@ -60,7 +61,7 @@ export default function RestoreNotice() {
         + `：记录 ${r.records} 条 · 收藏 ${r.favorites} 条`
       )
     } catch (e) {
-      setDone('恢复没成功：' + ((e && e.message) || '未知错误') + '。本机数据仍在，可稍后再试。')
+      setDone('恢复没成功：' + friendlyError(e) + '。本机数据仍在，可稍后再试。')
     } finally {
       setBusy(false)
       sync()

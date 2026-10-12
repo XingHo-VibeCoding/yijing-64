@@ -3,6 +3,7 @@ import hexData from '../data/64卦.json'
 import SourceTag from './SourceTag.jsx'
 import * as store from './storage.js'
 import { verdictLine } from './reading/verdict.js'
+import { friendlyError } from './errorText.js'
 
 const ITEM = (id) => hexData.items.find((h) => h.id === id)
 const ORDER = ['初', '二', '三', '四', '五', '上']
@@ -59,7 +60,7 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
         text: r.ok ? `正常 · ${r.body.service || 'yijing-64'} · ${r.ms} ms` : `异常 · HTTP ${r.status}`,
       })
     } catch (e) {
-      setHealth({ state: 'bad', text: '连不上：' + ((e && e.message) || '未知错误') })
+      setHealth({ state: 'bad', text: '连不上：' + friendlyError(e) })
     }
   }, [])
 
@@ -84,7 +85,7 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
       await store.refreshFromCloud()
       setCloud(store.cloudReadStatus())
     } catch (e) {
-      setProbe({ state: 'bad', text: '连不上：' + ((e && e.message) || '未知错误') })
+      setProbe({ state: 'bad', text: '连不上：' + friendlyError(e) })
     }
   }, [probeId])
 
@@ -95,7 +96,7 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
       setCloud(store.cloudReadStatus())
       setOrphan(store.orphanStatus())
     } catch (e) {
-      setCloud({ ...store.cloudReadStatus(), detail: '读取失败：' + ((e && e.message) || '未知错误') })
+      setCloud({ ...store.cloudReadStatus(), detail: '读取失败：' + friendlyError(e) })
     } finally {
       setBusy(false)
     }
@@ -114,7 +115,7 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
       setCloud(store.cloudReadStatus())
       setOrphan(store.orphanStatus())
     } catch (e) {
-      setRebound('重绑失败：' + ((e && e.message) || '未知错误'))
+      setRebound('重绑失败：' + friendlyError(e))
     } finally {
       setBusy(false)
     }
@@ -295,7 +296,7 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
                 setCode(store.exportBackupCode())
                 setMsg('进度码已生成，复制走即可')
               } catch (e) {
-                setMsg('生成失败：' + ((e && e.message) || '未知错误'))
+                setMsg('生成失败：' + friendlyError(e))
               }
             }}
           >
