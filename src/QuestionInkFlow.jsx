@@ -12,7 +12,7 @@ import { makeDotTexture } from './CastingAnimation.jsx'
  *   ① 点「起 一 卦」→ 白色雾气升腾铺满（**先让雾稳住，再出字**——此前 1.5s 就出题，
  *      雾未实、题面与首页内容重叠，用户截图指正）
  *   ② 雾面翻涌的背景上，问题以**黑色毛笔楷体**直接浮现（无底框、无衬底墨晕）
- *   ③ 每答完一题，**白云气翻涌汇集**（不是黑墨、也不是纯色白屏——交错翻涌带淡墨阴影层次）
+ *   ③ 每答完一题，**白云气翻涌汇集**（约 1.3s，全程自动，不需用户点「继续」）（不是黑墨、也不是纯色白屏——交错翻涌带淡墨阴影层次）
  *      → 散开时新问题的字逐个显影
  *   ④ 三问答完白云再汇集 → **黑云翻涌衔接**（照起卦动画「一二段之间」那段的观感：
  *      极坐标绕心翻涌、向心收拢遮严实、保持片刻、再墨散开）→ 露出起卦动画
@@ -34,8 +34,14 @@ const MIST = '252, 249, 242' // 亮白云团（比纸色更亮一档，翻涌时
 
 /* 时间轴（ms）——veil 再加长：雾要多翻涌一会儿、且浓到盖死底页（用户二轮指正） */
 const T_VEIL = 3200
-const T_COVER = 1400 // sweep：白云遮满（换题 / 进衔接点）
-const T_SWEEP_END = 2750 // sweep：散开完毕
+/* ⏱ 一问的节奏（用户 2026-10-12 定：「问题间动画持续三秒」）：
+ * 实测原参数从答完到选项可点要 5.3s（sweep 2.75s + 显影 2.55s）——
+ * 慢得像「卡住等点击」。现压缩到 **约 3.0s**：
+ *   sweep 1.30s（白云涌起 0.8 + 散开 0.5）→ 题面首字 0.26s 起逐字显影
+ *   → 选项 0.9s 起依次洇出，1.7s 内全部可点。
+ * 换题**全自动**：答完即涌、散开即出下一题，全程无需用户点「继续」（本来也没有继续按钮）。 */
+const T_COVER = 800 // sweep：白云遮满（换题 / 进衔接点）
+const T_SWEEP_END = 1300 // sweep：散开完毕
 /* handoff：三问→起卦动画的黑云衔接（用户指正「衔接太生硬」）
  * 参数照 CastingAnimation 的 inkIn 800 / hold 1000 / inkOut 800 等比放大，
  * 保证「墨涌上来 → 保持 → 墨散去」的节奏与起卦动画内部转场同源 */
@@ -64,6 +70,16 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
   const [inked, setInked] = useState(initPhase === 'sweep')
   const [leaving, setLeaving] = useState(initFinal)
   const [handoff, setHandoff] = useState(false) // 黑云衔接段（白雾 → 墨 → 露动画）
+  /* ⚠️ 选项是**淡入动画**（opacity 0 → 1），动画没跑完时元素已经能点 ——
+   * 用户可以点到「还看不见的按钮」（本机 CDP 验证时测到 options 从 DOM 里就在）。
+   * 故进入题目后的 1s 内锁住选项（此时选项尚未开始洇出，题面正在显影）。 */
+  const [entering, setEntering] = useState(false)
+  useEffect(() => {
+    if (phase !== 'ask') return undefined
+    setEntering(true)
+    const t = setTimeout(() => setEntering(false), 1000)
+    return () => clearTimeout(t)
+  }, [phase, step])
   const finalRef = useRef(initFinal)
   /* ⚠️ 挡严实（用户二轮指正）：mount 后立刻开始把 CSS 底铺向纸色（0.8s 内），
    * 不等 veil 翻涌完 —— 底页**一刻都不许透出来**；雾的升腾感由 canvas 在纸色上继续翻涌 */
@@ -474,6 +490,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
         (veiled ? ' is-paper' : '') +
         (inked ? ' is-inked' : '') +
         (handoff ? ' is-handoff' : '') +
+        (entering ? ' is-entering' : '') +
         (leaving ? ' is-final' : '')
       }
       data-tq-phase={phase}
@@ -491,7 +508,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
             <p className="tq-step-no">{Q.title}</p>
             <h3 className="tq-ask qi-ink-chars">
               {[...Q.ask].map((ch, i) => (
-                <span key={i} className="tq-char" style={{ animationDelay: 650 + i * 95 + 'ms' }}>
+                <span key={i} className="tq-char" style={{ animationDelay: 260 + i * 62 + 'ms' }}>
                   {ch}
                 </span>
               ))}
@@ -503,7 +520,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
                   <button
                     type="button"
                     className="tq-opt qi-appear"
-                    style={{ animationDelay: 1500 + i * 140 + 'ms' }}
+                    style={{ animationDelay: 900 + i * 110 + 'ms' }}
                     onClick={() => pick(Q.key, o.id)}
                   >
                     <span className="tq-opt-key" aria-hidden="true">{i + 1}</span>

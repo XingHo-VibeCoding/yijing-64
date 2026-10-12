@@ -1756,7 +1756,7 @@ body {
   opacity: 0;
   filter: blur(7px);
   text-shadow: 0 0 14px rgba(24, 20, 16, .55);
-  animation: tq-char-in .9s ease-out forwards;
+  animation: tq-char-in .5s ease-out forwards;
   white-space: pre;
 }
 @keyframes tq-char-in {
@@ -1767,7 +1767,7 @@ body {
   opacity: 0;
   filter: blur(5px);
   transform: translateY(9px);
-  animation: qi-opt-in .55s ease-out forwards;
+  animation: qi-opt-in .45s ease-out forwards;
 }
 @keyframes qi-opt-in {
   to { opacity: 1; filter: blur(0); transform: none; }
@@ -1785,6 +1785,12 @@ body {
 
 .tq-opts { list-style: none; margin: 14px 0 0; padding: 0; }
 .tq-opts li { margin: 0 0 9px; }
+/* 三问期间锁住底页滚动 —— 否则右侧露出滚动条，画面不干净（浮层是 fixed，但 body 仍可滚） */
+body:has(.qi-stage) { overflow: hidden; }
+
+/* 显影期保护：题面未显、选项未洇出时**不可点**（否则能点到看不见的按钮） */
+.qi-stage.is-entering .tq-opts { pointer-events: none; }
+
 /* 选项：无底框——直接在雾面上以文字呈现（用户指正），hover 时墨色沉下去 */
 .tq-opt {
   display: flex; align-items: baseline; gap: 14px;
