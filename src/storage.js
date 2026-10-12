@@ -25,6 +25,7 @@ import {
   ensureLocalUid, rememberCloudUid, identityState,
   markDeclined, clearDeclined,
 } from './identity.js'
+import { logRequest, getRequestLog } from './requestLog.js'
 
 const K_RECORDS = 'yijing.records.v1'
 const K_FAVORITES = 'yijing.favorites.v1'
@@ -126,11 +127,20 @@ let identity = identityState({})
  *         —— 用它验错误码会得到**假通过**（Day 19 实测踩到）。
  */
 async function apiGet(name, params = {}) {
-  if (!API_BASE) throw new Error('未配置 VITE_API_BASE')
+  if (!API_BASE) {
+    logRequest('GET', '/api/' + name, false, '未配置 VITE_API_BASE')
+    throw new Error('未配置 VITE_API_BASE')
+  }
   const c = await cloudReady()
-  if (!c) throw new Error('云端未就绪')
+  if (!c) {
+    logRequest('GET', '/api/' + name, false, '云端未就绪')
+    throw new Error('云端未就绪')
+  }
   const { accessToken } = await withTimeout(c.auth.getAccessToken())
-  if (!accessToken) throw new Error('取不到访问凭证')
+  if (!accessToken) {
+    logRequest('GET', '/api/' + name, false, '取不到访问凭证')
+    throw new Error('取不到访问凭证')
+  }
 
   const qs = new URLSearchParams()
   // ⚠️ 只过滤「空值」，**不过滤类型**（Day 19 修）。
@@ -154,8 +164,10 @@ async function apiGet(name, params = {}) {
     err.status = res.status
     err.code = (body && body.error && body.error.code) || ''
     err.body = body
+    logRequest('GET', '/api/' + name, false, `HTTP ${res.status}`)
     throw err
   }
+  logRequest('GET', '/api/' + name, true, 'ok')
   return { items: body.items || [], meta: body.meta || {} }
 }
 /**
@@ -173,11 +185,20 @@ async function apiGet(name, params = {}) {
  * @returns {Promise<{items?:Array, data?:object, meta?:object}>} 按响应形状给
  */
 async function apiCall(name, { method = 'GET', query = null, body = null } = {}) {
-  if (!API_BASE) throw new Error('未配置 VITE_API_BASE')
+  if (!API_BASE) {
+    logRequest(method, '/api/' + name, false, '未配置 VITE_API_BASE')
+    throw new Error('未配置 VITE_API_BASE')
+  }
   const c = await cloudReady()
-  if (!c) throw new Error('云端未就绪')
+  if (!c) {
+    logRequest(method, '/api/' + name, false, '云端未就绪')
+    throw new Error('云端未就绪')
+  }
   const { accessToken } = await withTimeout(c.auth.getAccessToken())
-  if (!accessToken) throw new Error('取不到访问凭证')
+  if (!accessToken) {
+    logRequest(method, '/api/' + name, false, '取不到访问凭证')
+    throw new Error('取不到访问凭证')
+  }
 
   const qs = new URLSearchParams()
   if (query) {
@@ -195,7 +216,10 @@ async function apiCall(name, { method = 'GET', query = null, body = null } = {})
   }
   const res = await withTimeout(fetch(url, init))
   // 204（契约 3.3 取消收藏）没有正文
-  if (res.status === 204) return { items: [], data: null, meta: {} }
+  if (res.status === 204) {
+    logRequest(method, '/api/' + name, true, 'HTTP 204')
+    return { items: [], data: null, meta: {} }
+  }
 
   const parsed = await res.json().catch(() => null)
   if (!res.ok || !parsed || parsed.ok !== true) {
@@ -204,8 +228,10 @@ async function apiCall(name, { method = 'GET', query = null, body = null } = {})
     err.status = res.status
     err.code = (parsed && parsed.error && parsed.error.code) || ''
     err.body = parsed
+    logRequest(method, '/api/' + name, false, `HTTP ${res.status}`)
     throw err
   }
+  logRequest(method, '/api/' + name, true, 'ok')
   return {
     items: parsed.items || null,
     data: parsed.data === undefined ? null : parsed.data,
@@ -710,6 +736,8 @@ if (typeof window !== 'undefined') {
     // 调试出口：断链判定状态（排查「二次打开记录清零」用）
     window.__orphan = () => orphanStatus()
     window.__rebind = () => rebindLocalToCloud()
+    // 调试出口：最近 N 条云端请求日志（时间 / 路径 / 结果；不含 token 与请求体）
+    window.__requestLog = () => getRequestLog()
     // 调试出口：身份状态（Day 19 启动流程用）
     window.__identity = () => identityStatus()
     // 调试出口：强制重判一次（恢复动作跑完要刷新提示状态）
@@ -787,7 +815,9 @@ export async function debugHealth() {
   const res = await withTimeout(fetch(`${API_BASE}/api/health`))
   const ms = Date.now() - started
   const body = await res.json().catch(() => null)
-  return { status: res.status, ok: !!(body && body.ok === true), body, ms }
+  const ok = !!(body && body.ok === true)
+  logRequest('GET', '/api/health', ok, `HTTP ${res.status}`)
+  return { status: res.status, ok, body, ms }
 }
 
 /**
