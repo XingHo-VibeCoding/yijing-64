@@ -158,6 +158,61 @@ async function apiGet(name, params = {}) {
   }
   return { items: body.items || [], meta: body.meta || {} }
 }
+/**
+ * 通用接口调用（Day 24 新增）：契约里除 records/favorites 外的其余 12 个接口都走它。
+ *
+ * ⚠️ 为什么不用 apiGet：apiGet 只会 GET、且**只认 items 形状**；
+ *   而契约里 1.2 / 4.3 / 5.1 / 6.1 的成功响应是 `{ ok, data }`。
+ *   硬套 apiGet 会把 data 当 items 丢掉 —— 所以这里显式区分两种形状。
+ *
+ * @param {string} name    路径段，如 'quiz/rounds'、'me/summary'（不要带 /api）
+ * @param {object} [opts]
+ * @param {string} [opts.method='GET']
+ * @param {object} [opts.query]   查询参数（空值会被丢掉）
+ * @param {object} [opts.body]    请求体
+ * @returns {Promise<{items?:Array, data?:object, meta?:object}>} 按响应形状给
+ */
+async function apiCall(name, { method = 'GET', query = null, body = null } = {}) {
+  if (!API_BASE) throw new Error('未配置 VITE_API_BASE')
+  const c = await cloudReady()
+  if (!c) throw new Error('云端未就绪')
+  const { accessToken } = await withTimeout(c.auth.getAccessToken())
+  if (!accessToken) throw new Error('取不到访问凭证')
+
+  const qs = new URLSearchParams()
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (v === undefined || v === null || v === '') continue
+      qs.set(k, String(v))
+    }
+  }
+  const url = `${API_BASE}/api/${name}${qs.toString() ? '?' + qs.toString() : ''}`
+
+  const init = { method, headers: { Authorization: `Bearer ${accessToken}` } }
+  if (body) {
+    init.headers['Content-Type'] = 'application/json'
+    init.body = JSON.stringify(body)
+  }
+  const res = await withTimeout(fetch(url, init))
+  // 204（契约 3.3 取消收藏）没有正文
+  if (res.status === 204) return { items: [], data: null, meta: {} }
+
+  const parsed = await res.json().catch(() => null)
+  if (!res.ok || !parsed || parsed.ok !== true) {
+    const msg = (parsed && parsed.error && parsed.error.message) || `HTTP ${res.status}`
+    const err = new Error(msg)
+    err.status = res.status
+    err.code = (parsed && parsed.error && parsed.error.code) || ''
+    err.body = parsed
+    throw err
+  }
+  return {
+    items: parsed.items || null,
+    data: parsed.data === undefined ? null : parsed.data,
+    meta: parsed.meta || {},
+  }
+}
+
 
 
 /** 懒初始化：匿名登录一次；任何失败都置 ready=null（本次会话退化为纯本地模式） */
@@ -303,10 +358,25 @@ async function pullAndMerge() {
 
   /* 测验成绩流水：云上有、本地没有的轮次 → 补进本地（按 日期+得分+题数 去重）。
      之前只上推不下拉，所以同一账号的进度读不回来（「每次进入重置」的成因之一）。 */
-  const { data: roundRows, error: roundErr } = await withTimeout(
-    c.db.from('study_rounds').select('score, total, created_at').eq('uid', c.uid)
-  )
-  if (!roundErr && Array.isArray(roundRows)) {
+  /* Day 24：先走接口（契约 4.1），失败才回退直连 rdb —— 与 records/favorites 同一套降级口径。
+     两条路径拿到的字段名不同（接口 camelCase / 直连 snake_case），故在此归一。 */
+  let roundRows = null
+  try {
+    const r = await apiCall('quiz/rounds')
+    if (Array.isArray(r.items)) {
+      roundRows = r.items.map((x) => ({ score: x.score, total: x.total, created_at: x.date }))
+    }
+  } catch (e) {
+    roundRows = null // 静默：走下面的直连
+  }
+  if (!roundRows) {
+    const direct = await withTimeout(
+      c.db.from('study_rounds').select('score, total, created_at').eq('uid', c.uid)
+    )
+    roundRows = !direct.error && Array.isArray(direct.data) ? direct.data : []
+  }
+  const roundErr = null
+  if (Array.isArray(roundRows)) {
     const local = read(K_QUIZ, [])
     const seen = new Set(local.map((r) => `${r.date}|${r.score}|${r.total}`))
     const merged = [...local]
@@ -328,10 +398,22 @@ async function pullAndMerge() {
   }
 
   /* 镀金成就：云上有的并进本地（一人一行；换设备时把金字补回来） */
-  const { data: gildRows, error: gildErr } = await withTimeout(
-    c.db.from('gilded').select('hexagram_ids').eq('uid', c.uid)
-  )
-  if (!gildErr && Array.isArray(gildRows) && gildRows.length) {
+  let gildRows = null
+  try {
+    const r = await apiCall('gilded')
+    if (r.data && Array.isArray(r.data.hexagramIds)) {
+      gildRows = [{ hexagram_ids: r.data.hexagramIds }]
+    }
+  } catch (e) {
+    gildRows = null
+  }
+  if (!gildRows) {
+    const direct = await withTimeout(
+      c.db.from('gilded').select('hexagram_ids').eq('uid', c.uid)
+    )
+    gildRows = !direct.error && Array.isArray(direct.data) ? direct.data : null
+  }
+  if (Array.isArray(gildRows) && gildRows.length) {
     const local = normIds(read(K_GILDED, []))
     const merged = normIds([...local, ...(gildRows[0].hexagram_ids || [])])
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
@@ -341,10 +423,22 @@ async function pullAndMerge() {
   }
 
   /* 累计进度里的错题集合：单独存一份本地镜像，作为错题本的补充来源 */
-  const { data: progRows, error: progErr } = await withTimeout(
-    c.db.from('study_progress').select('wrong_ids').eq('uid', c.uid)
-  )
-  if (!progErr && Array.isArray(progRows) && progRows.length) {
+  let progRows = null
+  try {
+    const r = await apiCall('quiz/progress')
+    if (r.data && Array.isArray(r.data.wrongIds)) {
+      progRows = [{ wrong_ids: r.data.wrongIds }]
+    }
+  } catch (e) {
+    progRows = null
+  }
+  if (!progRows) {
+    const direct = await withTimeout(
+      c.db.from('study_progress').select('wrong_ids').eq('uid', c.uid)
+    )
+    progRows = !direct.error && Array.isArray(direct.data) ? direct.data : null
+  }
+  if (Array.isArray(progRows) && progRows.length) {
     const ids = normIds(progRows[0].wrong_ids)
     const cur = JSON.stringify(normIds(read(K_WRONG_CLOUD, [])))
     if (JSON.stringify(ids) !== cur) {
@@ -528,21 +622,41 @@ const pushFavoriteAdd = (hexagramId) =>
 const pushFavoriteRemove = (hexagramId) =>
   pushSilent((c) => c.db.from('favorites').delete().eq('uid', c.uid).eq('hexagram_id', hexagramId))
 
-/** 镀金上推：整列 upsert（本地并集为准；云端无则建行） */
-const pushGilded = () =>
-  pushSilent((c) =>
-    c.db.from('gilded').upsert(
-      { uid: c.uid, hexagram_ids: normIds(read(K_GILDED, [])), updated_at: new Date().toISOString() },
-      { onConflict: 'uid' }
-    )
-  )
+/**
+ * 镀金上推（Day 24）：先 PUT 接口（契约 5.2，**并集**语义），失败才回退直连 upsert。
+ * ⚠️ 接口是并集、云端直连那条也是并集（本地已是并集），两端口径一致 —— 成就只增不减。
+ */
+const pushGilded = () => {
+  const ids = normIds(read(K_GILDED, []))
+  pushSilent(async (c) => {
+    try {
+      await apiCall('gilded', { method: 'PUT', body: { hexagramIds: ids } })
+      return { data: null, error: null }
+    } catch (e) {
+      return c.db.from('gilded').upsert(
+        { uid: c.uid, hexagram_ids: ids, updated_at: new Date().toISOString() },
+        { onConflict: 'uid' }
+      )
+    }
+  })
+}
 
 const pushRound = (round) =>
-  pushSilent((c) => c.db.from('study_rounds').insert({ uid: c.uid, score: round.score, total: round.total }))
+  pushSilent(async (c) => {
+    try {
+      const r = await apiCall('quiz/rounds', {
+        method: 'POST',
+        body: { score: round.score, total: round.total },
+      })
+      return { data: r.data, error: null }
+    } catch (e) {
+      return c.db.from('study_rounds').insert({ uid: c.uid, score: round.score, total: round.total })
+    }
+  })
 
 /** 进度上推：本地累计值 upsert（云端同名键覆盖为本地口径） */
 const pushProgress = () =>
-  pushSilent((c) => {
+  pushSilent(async (c) => {
     const rounds = read(K_QUIZ, [])
     const answered = rounds.reduce((s, r) => s + (r.total || 0), 0)
     const correct = rounds.reduce((s, r) => s + (r.score || 0), 0)
@@ -552,16 +666,26 @@ const pushProgress = () =>
         if ((r.wrongIds || []).includes(id)) wrong.add(id)
       }
     }
-    return c.db.from('study_progress').upsert(
-      {
-        uid: c.uid,
-        answered_total: answered,
-        correct_total: correct,
-        wrong_ids: [...wrong].sort((a, b) => a - b),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'uid' }
-    )
+    const wrongList = [...wrong].sort((a, b) => a - b)
+    // Day 24：先 PUT 接口（契约 4.4），失败才回退直连 upsert
+    try {
+      const r = await apiCall('quiz/progress', {
+        method: 'PUT',
+        body: { answeredTotal: answered, correctTotal: correct, wrongIds: wrongList },
+      })
+      return { data: r.data, error: null }
+    } catch (e) {
+      return c.db.from('study_progress').upsert(
+        {
+          uid: c.uid,
+          answered_total: answered,
+          correct_total: correct,
+          wrong_ids: wrongList,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'uid' }
+      )
+    }
   })
 
 /* 启动流程（Day 19）：先读/建本地 UID 锚点，再后台拉云端做对账。

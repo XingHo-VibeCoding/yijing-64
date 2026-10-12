@@ -84,4 +84,40 @@ async function listRecords(token, { limit = DEFAULT_LIMIT, before = '', demoUid 
   return payload.map(mapRow)
 }
 
-module.exports = { listRecords, DEFAULT_LIMIT, MAX_LIMIT }
+
+/* ============================================================================
+ * Day 24 新增：契约 2.2（POST /api/records）需要的写入能力
+ *
+ * ⚠️ 上面 listRecords 的**查询串逐字节不动**（已过双重回归），
+ *   新函数另起一块，共用 lib/postgrest.js。
+ * ==========================================================================*/
+const rdb = require('../lib/postgrest.js')
+
+/** 查某一天的记录（幂等判定用）；没有则返回 null */
+async function findRecordByDate(token, date) {
+  const { rows } = await rdb.query(token, 'divination_records', {
+    select: 'date,hexagram_id,changing_lines',
+    date: 'eq.' + encodeURIComponent(String(date)),
+    limit: 1,
+  })
+  if (!rows.length) return null
+  return mapRow(rows[0])
+}
+
+/**
+ * 插入今日记录（纯 INSERT；不覆盖已有）
+ * ⚠️ 不用 upsert：PG + RLS 下 merge-duplicates 会先读现有行、让 SELECT 策略参与判定，
+ *    报 `new row violates row-level security policy`（第一次成功、重复必 401）。
+ */
+async function insertRecord(token, { uid, hexagramId, changingLines, date }) {
+  // ⚠️ uid 为空时**不写这一列**，交给数据库的 default auth.uid() 填
+  //（匿名登录的 token 里不含 uid，见 index.js#callerForWrite 的实测记录）
+  const body = { date, hexagram_id: hexagramId, changing_lines: changingLines, created_at: date }
+  if (uid) body.uid = uid
+  const row = await rdb.insert(token, 'divination_records', {
+    ...body,
+  })
+  return mapRow(row || { date, hexagram_id: hexagramId, changing_lines: changingLines })
+}
+
+module.exports = { listRecords, findRecordByDate, insertRecord, DEFAULT_LIMIT, MAX_LIMIT }

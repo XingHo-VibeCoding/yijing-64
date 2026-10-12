@@ -65,6 +65,11 @@ const { readRequest, readJsonBody } = require('./lib/request')
 const { uidFromToken, shanghaiToday } = require('./lib/identity')
 const recordsRepo = require('./repositories/recordsRepository')
 const favoritesRepo = require('./repositories/favoritesRepository')
+/* Day 24：契约里其余 12 个接口的实现（此前只有 4 个经过云函数，前端其余直连 rdb） */
+const hexagramsRepo = require('./repositories/hexagramsRepository')
+const quizRepo = require('./repositories/quizRepository')
+const gildedRepo = require('./repositories/gildedRepository')
+const meRepo = require('./repositories/meRepository')
 
 const DEMO_UID_RE = /^demo-yijing64-user-[a-z]$/ // 通道 B 只放行这五个假 uid
 
@@ -133,6 +138,17 @@ function mapRepoError(e) {
   // fetch 本身抛错（连不上）
   return fail(503, 'UPSTREAM_UNAVAILABLE', '连不上数据库 HTTP 接口', null)
 }
+
+/**
+ * 单对象响应：`{ ok: true, data: {...} }`
+ *
+ * ⚠️ 为什么需要它：`ok()` 的签名是 `ok(items, meta, headers)` —— 第一个参数会被
+ * 序列化成 **items**。而契约 1.2 / 4.3 / 5.1 要的是 **data**（`{ok, data:{…}}`）。
+ * 误用 `ok(data, headers)` 的后果有三重：键名错（items 而非 data）、
+ * **headers 被当成 meta**（于是 CORS 头直接丢失）、以及多出一个 items 字段。
+ * 三个都在实际调用时踩到了，故单独给契约的 data 形状一个明确助手。
+ */
+const data200 = (data, headers) => json(200, { ok: true, data }, headers)
 
 async function handleRead(name, spec, qs, headers) {
   // ── 1. 决定用哪条通道拿数据 ──
@@ -293,6 +309,380 @@ async function handleFavoritesPost(event, headers) {
   return json(201, { ok: true, data: data }, headers)
 }
 
+
+/* ============================================================================
+ * Day 24 新增：契约里此前只有 4 个接口经过云函数，其余 12 个是设计稿
+ * （前端此前直连 rdb）。本区块把它们全部落地。
+ *
+ * ⚠️ **为什么新路由表与旧的分派并存**：
+ *   旧的 `handleRead` / `handleFavoritesPost` 已经过「同进程逐条比对 44/44 +
+ *   线上真实会话」的双重回归。为了整洁去重写它们，等于拿**已验证的**换**未验证的**。
+ *   所以新表**先匹配、未命中才回落旧逻辑** —— 现有 4 个接口的行为逐字节不变。
+ * ==========================================================================*/
+
+/**
+ * 判定调用方通道（读接口用）：通道 A 真实会话 / 通道 B 示例数据 uid
+ * 规则与旧 `handleRead` 内部**逐字一致**，抽出来只是避免重复写。
+ * @returns {{ok:true, token:string, demoUid:string}|{ok:false, response:object}}
+ */
+function callerForRead(headers, qs) {
+  const caller = headers.authorization || ''
+  if (/^Bearer\s+\S+/i.test(caller)) {
+    return { ok: true, token: caller.replace(/^Bearer\s+/i, '').trim(), demoUid: '' }
+  }
+  if (qs.uid) {
+    if (!DEMO_UID_RE.test(String(qs.uid))) {
+      return {
+        ok: false,
+        response: fail(403, 'FORBIDDEN', 'uid 参数只接受示例数据（demo-yijing64-user-*）', headers),
+      }
+    }
+    const pk = process.env.PUBLISHABLE_KEY || ''
+    if (!pk) {
+      return {
+        ok: false,
+        response: fail(503, 'UPSTREAM_UNAVAILABLE', '未配置 PUBLISHABLE_KEY，无法读取示例数据', headers),
+      }
+    }
+    return { ok: true, token: pk, demoUid: String(qs.uid) }
+  }
+  return {
+    ok: false,
+    response: fail(401, 'UNAUTHENTICATED',
+      '缺少会话：请带 Authorization 头，或用 ?uid=demo-yijing64-user-a 读示例数据', headers),
+  }
+}
+
+/**
+ * 判定写接口通道：只走通道 A（必须带真实会话凭证）。
+ *
+ * ⭐⭐ **Day 24 实测后改的关键一条**：这里**不再要求能从 token 里解析出 uid**。
+ *   实测（用真实匿名会话的 token）：token 的 payload 里只有
+ *   `{ sub: "anon", is_anonymous: true }`，**根本不含 uid** ——
+ *   而前端用的正是 `signInAnonymously()`，uid 只存在于 SDK 的 session 对象里，
+ *   不在凭证里。于是早前「uid 为空或为 anon 就 401」的写法会让**所有写接口
+ *   在生产环境必然 401**（连 Day 18 就存在的 POST /api/favorites 也是如此）。
+ *
+ *   但同一个 token 读接口完全正常 —— 说明**数据库侧的 `auth.uid()` 能正确
+ *   解析这个身份**，隔离照常生效。所以身份判定应当**交给数据库与 RLS**，
+ *   云函数只负责「有没有带凭证」，这与项目既定原则一致：
+ *   「RLS 自己就能按 uid 隔离，后端不要自己拼 uid 过滤」。
+ *
+ *   ⚠️ 由此带来一条前置条件：写入时**不能显式写 uid 列**，必须让数据库的
+ *      `default auth.uid()` 填（uid 列 not null 且原先没有默认值）。
+ *      见 db/schema.sql 的 Day 24 变更记录。
+ */
+function callerForWrite(headers, what) {
+  const caller = headers.authorization || ''
+  if (!/^Bearer\s+\S+/i.test(caller)) {
+    logEvent('warn', what, { reason: 'missing_session' })
+    return { ok: false, response: fail(401, 'UNAUTHENTICATED', '请先登录后再操作（需要带上会话）', headers) }
+  }
+  const token = caller.replace(/^Bearer\s+/i, '').trim()
+  // uid 只在 token 里真的带时才有（自定义登录）；匿名登录时留空 → 交给数据库填
+  const uid = uidFromToken(token)
+  return { ok: true, token, uid: uid && uid !== 'anon' ? uid : '' }
+}
+
+/** 校验一个 1–64 的整数（hexagramId / :id 通用） */
+function intInRange(raw, label) {
+  const n = typeof raw === 'string' ? Number(raw.trim()) : raw
+  if (!Number.isInteger(n)) {
+    return { ok: false, code: label + ' 必须是整数，收到的是「' + String(raw).slice(0, 20) + '」' }
+  }
+  if (n < 1 || n > 64) {
+    return { ok: false, code: label + ' 必须在 1 – 64 之间，收到的是 ' + n }
+  }
+  return { ok: true, value: n }
+}
+
+/** 校验卦序号数组（1–64，去重升序）—— 契约 4.2 / 4.4 / 5.2 共用 */
+function hexagramIdList(raw, label) {
+  if (!Array.isArray(raw)) return { ok: false, code: label + ' 必须是数组' }
+  for (const x of raw) {
+    if (!Number.isInteger(x) || x < 1 || x > 64) {
+      return { ok: false, code: label + ' 里含非法卦序号：' + String(x).slice(0, 20) + '（应为 1 – 64 的整数）' }
+    }
+  }
+  return { ok: true, value: Array.from(new Set(raw)).sort((a, b) => a - b) }
+}
+
+/* ---------- 一、卦象主数据（静态，不查库；契约 1.1 / 1.2） ---------- */
+
+function handleHexagramsList(event, headers) {
+  const { qs } = readRequest(event || {})
+  // 契约 1.1 的错误只有 500 —— 这是公开静态数据，不要求会话（故不走 callerForRead）
+  const volume = String(qs.volume || '')
+  if (volume && volume !== '上经' && volume !== '下经') {
+    return fail(422, 'VALIDATION_FAILED', 'volume 只接受「上经」或「下经」', headers)
+  }
+  try {
+    const items = hexagramsRepo.listHexagrams({ volume, q: String(qs.q || '') })
+    return ok(items, { count: items.length, total: 64 }, headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+function handleHexagramDetail(event, headers, match) {
+  const raw = match[1]
+  if (!/^\d{1,3}$/.test(String(raw))) {
+    return fail(400, 'BAD_REQUEST', 'id 必须是数字，收到的是「' + String(raw).slice(0, 20) + '」', headers)
+  }
+  const v = intInRange(raw, 'id')
+  if (!v.ok) return fail(400, 'BAD_REQUEST', v.code, headers) // 契约 1.2：越界是 400
+  try {
+    return data200(hexagramsRepo.getHexagram(v.value), headers)
+  } catch (e) {
+    if (e && e.kind === 'not_found') return fail(404, 'NOT_FOUND', '没有这一卦：' + v.value, headers)
+    return mapRepoError(e)
+  }
+}
+
+/* ---------- 二、起卦记录存档（契约 2.2） ---------- */
+
+async function handleRecordsPost(event, headers) {
+  const w = callerForWrite(headers, 'records.post')
+  if (!w.ok) return w.response
+
+  const body = readJsonBody(event)
+  if (body === null) {
+    return fail(400, 'BAD_REQUEST', '请求体不是合法的 JSON（应形如 {"hexagramId": 1, "changingLines": [3]}）', headers)
+  }
+  const v = intInRange(body.hexagramId === undefined ? '' : body.hexagramId, 'hexagramId')
+  if (!v.ok) return fail(422, 'VALIDATION_FAILED', v.code, headers)
+
+  // changingLines：契约要求「去重、升序、过滤非法值后入库」
+  const clRaw = body.changingLines === undefined || body.changingLines === null ? [] : body.changingLines
+  if (!Array.isArray(clRaw)) return fail(422, 'VALIDATION_FAILED', 'changingLines 必须是数组', headers)
+  const changingLines = Array.from(
+    new Set(clRaw.filter((x) => Number.isInteger(x) && x >= 1 && x <= 6))
+  ).sort((a, b) => a - b)
+
+  const today = shanghaiToday() // ⚠️ date 由服务端取，客户端传了也忽略（契约 2.2 约定）
+
+  // 幂等：当天已有记录 → 200 且**不覆盖**（契约 2.2）
+  try {
+    const existed = await recordsRepo.findRecordByDate
+      ? await recordsRepo.findRecordByDate(w.token, today)
+      : null
+    if (existed) {
+      return json(200, {
+        ok: true,
+        data: { date: today, hexagramId: existed.hexagramId, changingLines: existed.changingLines },
+        created: false,
+      }, headers)
+    }
+    // ⚠️ 不传 uid：让数据库的 default auth.uid() 填（token 里没有 uid，见 callerForWrite 注释）
+    const row = await recordsRepo.insertRecord(
+      w.token, { uid: w.uid, hexagramId: v.value, changingLines, date: today }
+    )
+    return json(201, {
+      ok: true,
+      data: { date: today, hexagramId: v.value, changingLines },
+      created: true,
+      row: row || undefined,
+    }, headers)
+  } catch (e) {
+    logEvent('error', 'records.post', { error: String((e && e.message) || e) })
+    return mapRepoError(e)
+  }
+}
+
+/* ---------- 三、取消收藏（契约 3.3，幂等 204） ---------- */
+
+async function handleFavoritesDelete(event, headers, match) {
+  const w = callerForWrite(headers, 'favorites.delete')
+  if (!w.ok) return w.response
+  const raw = match[1]
+  if (!/^\d{1,3}$/.test(String(raw))) {
+    return fail(400, 'BAD_REQUEST', 'hexagramId 必须是数字，收到的是「' + String(raw).slice(0, 20) + '」', headers)
+  }
+  const v = intInRange(raw, 'hexagramId')
+  if (!v.ok) return fail(400, 'BAD_REQUEST', v.code, headers)
+  try {
+    await favoritesRepo.deleteFavorite(w.token, v.value)
+    // 契约：本来没收藏也返回 204（幂等）
+    return { statusCode: 204, headers: json(200, {}, headers).headers, body: '' }
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+/* ---------- 四、测验（契约 4.1 / 4.2 / 4.3 / 4.4） ---------- */
+
+async function handleQuizRoundsGet(event, headers) {
+  const { qs } = readRequest(event || {})
+  const c = callerForRead(headers, qs)
+  if (!c.ok) return c.response
+  let limit = quizRepo.DEFAULT_LIMIT
+  if (qs.limit !== undefined && qs.limit !== '') {
+    if (!/^\d{1,4}$/.test(String(qs.limit))) {
+      return fail(422, 'VALIDATION_FAILED', 'limit 必须是正整数', headers)
+    }
+    limit = Number(qs.limit)
+    if (limit < 1 || limit > quizRepo.MAX_LIMIT) {
+      return fail(422, 'VALIDATION_FAILED', 'limit 必须在 1 – ' + quizRepo.MAX_LIMIT + ' 之间', headers)
+    }
+  }
+  try {
+    const rows = await quizRepo.listRounds(c.token, { limit, demoUid: c.demoUid })
+    return ok(rows, { count: rows.length }, headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+async function handleQuizRoundsPost(event, headers) {
+  const w = callerForWrite(headers, 'quiz.rounds.post')
+  if (!w.ok) return w.response
+  const body = readJsonBody(event)
+  if (body === null) return fail(400, 'BAD_REQUEST', '请求体不是合法的 JSON', headers)
+
+  const score = typeof body.score === 'string' ? Number(body.score) : body.score
+  const total = typeof body.total === 'string' ? Number(body.total) : body.total
+  if (!Number.isInteger(total) || total < 1) {
+    return fail(422, 'VALIDATION_FAILED', 'total 必须是正整数', headers)
+  }
+  if (!Number.isInteger(score) || score < 0) {
+    return fail(422, 'VALIDATION_FAILED', 'score 必须是非负整数', headers)
+  }
+  if (score > total) {
+    return fail(422, 'VALIDATION_FAILED', 'score 不能大于 total（收到 ' + score + ' / ' + total + '）', headers)
+  }
+  try {
+    const row = await quizRepo.insertRound(w.token, { score, total })
+    return json(201, { ok: true, data: row }, headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+async function handleQuizProgressGet(event, headers) {
+  const { qs } = readRequest(event || {})
+  const c = callerForRead(headers, qs)
+  if (!c.ok) return c.response
+  try {
+    const row = await quizRepo.getProgress(c.token, { demoUid: c.demoUid })
+    return data200(row || { answeredTotal: 0, correctTotal: 0, wrongIds: [], updatedAt: null }, headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+async function handleQuizProgressPut(event, headers) {
+  const w = callerForWrite(headers, 'quiz.progress.put')
+  if (!w.ok) return w.response
+  const body = readJsonBody(event)
+  if (body === null) return fail(400, 'BAD_REQUEST', '请求体不是合法的 JSON', headers)
+
+  const a = typeof body.answeredTotal === 'string' ? Number(body.answeredTotal) : body.answeredTotal
+  const c2 = typeof body.correctTotal === 'string' ? Number(body.correctTotal) : body.correctTotal
+  if (!Number.isInteger(a) || a < 0) return fail(422, 'VALIDATION_FAILED', 'answeredTotal 必须是非负整数', headers)
+  if (!Number.isInteger(c2) || c2 < 0) return fail(422, 'VALIDATION_FAILED', 'correctTotal 必须是非负整数', headers)
+  if (c2 > a) return fail(422, 'VALIDATION_FAILED', 'correctTotal 不能大于 answeredTotal', headers)
+  const wrong = body.wrongIds === undefined || body.wrongIds === null ? [] : body.wrongIds
+  const wl = hexagramIdList(wrong, 'wrongIds')
+  if (!wl.ok) return fail(422, 'VALIDATION_FAILED', wl.code, headers)
+
+  try {
+    const row = await quizRepo.putProgress(w.token, {
+      answeredTotal: a, correctTotal: c2, wrongIds: wl.value,
+    })
+    return json(200, { ok: true, data: row }, headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+/* ---------- 五、镀金（契约 5.1 / 5.2，并集语义） ---------- */
+
+async function handleGildedGet(event, headers) {
+  const { qs } = readRequest(event || {})
+  const c = callerForRead(headers, qs)
+  if (!c.ok) return c.response
+  try {
+    return data200(await gildedRepo.getGilded(c.token, { demoUid: c.demoUid }), headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+async function handleGildedPut(event, headers) {
+  const w = callerForWrite(headers, 'gilded.put')
+  if (!w.ok) return w.response
+  const body = readJsonBody(event)
+  if (body === null) return fail(400, 'BAD_REQUEST', '请求体不是合法的 JSON', headers)
+  const raw = body.hexagramIds === undefined ? [] : body.hexagramIds
+  const list = hexagramIdList(raw, 'hexagramIds')
+  if (!list.ok) return fail(422, 'VALIDATION_FAILED', list.code, headers)
+  try {
+    // 契约 5.2：**并集**写回，成就只增不减
+    return json(200, { ok: true, data: await gildedRepo.putGilded(w.token, list.value) }, headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+/* ---------- 六、概览与清除（契约 6.1 / 6.2） ---------- */
+
+async function handleSummary(event, headers) {
+  const { qs } = readRequest(event || {})
+  const c = callerForRead(headers, qs)
+  if (!c.ok) return c.response
+  try {
+    return data200(await meRepo.summary(c.token, { demoUid: c.demoUid }), headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+async function handleClearData(event, headers) {
+  const w = callerForWrite(headers, 'me.clear')
+  if (!w.ok) return w.response
+  const { qs } = readRequest(event || {})
+  const scope = String(qs.scope || 'all')
+  if (!['records', 'favorites', 'quiz', 'all'].includes(scope)) {
+    return fail(422, 'VALIDATION_FAILED',
+      'scope 只接受 records / favorites / quiz / all，收到的是「' + scope.slice(0, 20) + '」', headers)
+  }
+  try {
+    const cleared = await meRepo.clearMyData(w.token, scope)
+    logEvent('info', 'me.clear', { uid: w.uid, scope, cleared })
+    return json(200, { ok: true, data: { cleared } }, headers)
+  } catch (e) {
+    return mapRepoError(e)
+  }
+}
+
+/* ============================================================================
+ * 新路由表：按「method + 去掉 /api 前缀的相对路径」匹配
+ * ⚠️ 兼容网关透传前缀与不透传两种形态（EnablePathTransmission 两种状态都遇到过）
+ * ==========================================================================*/
+const NEW_ROUTES = [
+  { m: 'GET', re: /^\/hexagrams$/, h: handleHexagramsList },
+  { m: 'GET', re: /^\/hexagrams\/([^/]+)$/, h: handleHexagramDetail },
+  { m: 'POST', re: /^\/records$/, h: handleRecordsPost },
+  { m: 'DELETE', re: /^\/favorites\/([^/]+)$/, h: handleFavoritesDelete },
+  { m: 'GET', re: /^\/quiz\/rounds$/, h: handleQuizRoundsGet },
+  { m: 'POST', re: /^\/quiz\/rounds$/, h: handleQuizRoundsPost },
+  { m: 'GET', re: /^\/quiz\/progress$/, h: handleQuizProgressGet },
+  { m: 'PUT', re: /^\/quiz\/progress$/, h: handleQuizProgressPut },
+  { m: 'GET', re: /^\/gilded$/, h: handleGildedGet },
+  { m: 'PUT', re: /^\/gilded$/, h: handleGildedPut },
+  { m: 'GET', re: /^\/me\/summary$/, h: handleSummary },
+  { m: 'DELETE', re: /^\/me\/data$/, h: handleClearData },
+]
+
+/** 把网关给的 path 归一成相对路径（两种前缀形态都认） */
+function relPath(path) {
+  // 去掉末尾斜杠 → 去掉可选的 /api 前缀 → 保证以 / 开头
+  const rel = String(path || '')
+    .replace(/\/+$/, '')
+    .replace(/^\/?(api\b)?\/?/, '/')
+  return rel === '' ? '/' : rel
+}
+
 /* ============================================================================
  * 入口：解析请求 → 分派（GET 读 / POST 写）
  * ==========================================================================*/
@@ -306,6 +696,14 @@ exports.main = async (event) => {
 
   // 预检先答（跨域 + 带 Authorization 头时浏览器必发），不算业务请求
   if (method === 'OPTIONS') return preflight(headers)
+
+  /* ── Day 24 新路由：12 个新接口（其余走下面的旧分派）── */
+  const rel = relPath(path)
+  for (const r of NEW_ROUTES) {
+    if (r.m !== method) continue
+    const m = rel.match(r.re)
+    if (m) return r.h(event, headers, m)
+  }
 
   /* ── 写：POST /api/favorites ── */
   if (name === 'favorites' && method === 'POST') {

@@ -141,7 +141,26 @@ async function insertFavorite(token, { uid, hexagramId, createdAt }) {
   return { status: res.status, payload: back }
 }
 
+
+/* ============================================================================
+ * Day 24 新增：契约 3.3（DELETE /api/favorites/:hexagramId）需要的删除能力
+ * ⚠️ 幂等语义：本来没收藏也当成功（契约 3.3 明确返回 204，不报 404）。
+ *    删除**不加 uid 条件** —— RLS 保证只能删自己的行。
+ * ==========================================================================*/
+const rdb = require('../lib/postgrest.js')
+
+/** 删除一卦的收藏，返回被删的行数（0 = 本来就没有，同样算成功） */
+async function deleteFavorite(token, hexagramId) {
+  return rdb.del(token, 'favorites', {
+    hexagram_id: 'eq.' + encodeURIComponent(String(hexagramId)),
+  })
+}
+
 module.exports = {
-  listFavorites, findFavoriteByHexagramId, insertFavorite,
-  DEFAULT_LIMIT, MAX_LIMIT,
+  listFavorites,
+  findFavoriteByHexagramId,
+  insertFavorite,
+  deleteFavorite,
+  DEFAULT_LIMIT,
+  MAX_LIMIT,
 }
