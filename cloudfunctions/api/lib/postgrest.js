@@ -67,7 +67,12 @@ function totalFromRange(res) {
  * @returns {Promise<{rows:Array, count:number|null}>}
  */
 async function query(token, table, params = {}, { countOnly = false } = {}) {
-  const p = countOnly ? { ...params, select: 'id', limit: 0 } : params
+  // ⚠️ countOnly 的 select 列**必须每张表都有**。以前硬编码 'id'，但库里
+  //    只有 study_rounds 有 id，另外四张（divination_records / favorites /
+ //    study_progress / gilded）的主键是 uid → 6.1 概览线上 500
+  //    `column divination_records.id does not exist`。
+  //    'uid' 是五张表**唯一都有**的列（RLS 也按它过滤），选它最安全。
+  const p = countOnly ? { ...params, select: params.select || 'uid', limit: 0 } : params
   const res = await fetch(buildQuery(table, p), {
     headers: {
       Authorization: 'Bearer ' + token,

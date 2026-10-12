@@ -14,24 +14,51 @@
 
 const rdb = require('../lib/postgrest.js')
 
-const ROUNDS_SELECT = 'id,date,score,total'
+/**
+ * ⚠️ `study_rounds` **没有 `date` 列**（正本 `db/schema.sql` §1.4 只有
+ *    `id / uid / score / total / created_at`）—— 以前这里 select 了 `date`、
+ *    order by `date`、insert 也塞 `date`，线上实测三个接口全 500：
+ *    `column study_rounds.date does not exist`。
+ *    契约要的是**业务日**（Asia/Shanghai 的「今天」），所以改成读 `created_at` 再折算，
+ *    排序直接用 `created_at.desc`（timestamptz 本身有序，与业务日排序不冲突）。
+ */
+const ROUNDS_SELECT = 'id,created_at,score,total'
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
+
+/** timestamptz 字符串 → Asia/Shanghai 的 YYYY-MM-DD（读库回显用，避免 08:00 前差一天） */
+const toBusinessDate = (ts) => {
+  if (!ts) return null
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(ts))
+  const g = {}
+  for (const p of parts) g[p.type] = p.value
+  return g.year + '-' + g.month + '-' + g.day
+}
 
 /** 数据库列 → 契约 camelCase */
 const mapRound = (r) => ({
   id: r.id,
-  date: r.date,
+  date: toBusinessDate(r.created_at || r.createdAt),
   score: r.score,
   total: r.total,
 })
 
-const mapProgress = (r) => ({
-  answeredTotal: r.answered_total != null ? r.answered_total : r.answeredTotal,
-  correctTotal: r.correct_total != null ? r.correct_total : r.correctTotal,
-  wrongIds: r.wrong_ids || r.wrongIds || [],
-  updatedAt: r.updated_at || r.updatedAt || null,
-})
+/** 契约 4.3 的 updatedAt 是「日期」，但库里是 timestamptz —— 回显时折算业务日 */
+const mapProgress = (r) => {
+  const raw = r.updated_at || r.updatedAt || null
+  return {
+    answeredTotal: r.answered_total != null ? r.answered_total : r.answeredTotal,
+    correctTotal: r.correct_total != null ? r.correct_total : r.correctTotal,
+    wrongIds: r.wrong_ids || r.wrongIds || [],
+    // 只有纯日期串（YYYY-MM-DD）原样透传；timestamptz 才折算，避免二次折算
+    updatedAt: typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : toBusinessDate(raw),
+  }
+}
 
 /**
  * 契约 4.1 `GET /api/quiz/rounds` —— 按 date 倒序
@@ -41,7 +68,7 @@ const mapProgress = (r) => ({
  * @param {string} [opts.demoUid] 示例数据通道；通道 A 不传，靠 RLS 过滤
  */
 async function listRounds(token, { limit = DEFAULT_LIMIT, demoUid = '' } = {}) {
-  const q = { select: ROUNDS_SELECT, order: 'date.desc' }
+  const q = { select: ROUNDS_SELECT, order: 'created_at.desc' }
   if (limit) q.limit = limit
   if (demoUid) q.uid = 'eq.' + encodeURIComponent(demoUid)
   const { rows } = await rdb.query(token, 'study_rounds', q)
@@ -55,7 +82,8 @@ async function listRounds(token, { limit = DEFAULT_LIMIT, demoUid = '' } = {}) {
  * @param {string} [uid] 显式指定 uid（demo 通道）；通道 A 传空，靠 RLS 的 default
  */
 async function insertRound(token, { score, total }, uid = '') {
-  const body = { score, total, date: new Date().toISOString().slice(0, 10) }
+  // ⚠️ 不写 date —— 表里没这一列（见文件头）；契约的 date 由 created_at 折算回显
+  const body = { score, total }
   // ⚠️ uid 交给数据库 RLS 的 default(auth.uid()) —— 通道 A 不显式写 uid
   const row = await rdb.insert(token, 'study_rounds', uid ? { ...body, uid } : body)
   return mapRound(row || {})
@@ -84,7 +112,9 @@ async function putProgress(token, { answeredTotal, correctTotal, wrongIds }, uid
     answered_total: answeredTotal,
     correct_total: correctTotal,
     wrong_ids: wrongIds,
-    updated_at: new Date().toISOString().slice(0, 10),
+    // ⚠️ 写**完整时间戳**而不是 'YYYY-MM-DD'：列是 timestamptz，
+    //    塞纯日期会被 PG 按会话时区补成当天零点，回显折算时区可能差一天
+    updated_at: new Date().toISOString(),
   }
 
   if (rows.length) {
