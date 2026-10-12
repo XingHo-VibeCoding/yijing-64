@@ -645,8 +645,18 @@ const pushFavoriteAdd = (hexagramId) =>
     )
   )
 
+// 取消收藏：先走契约 DELETE 接口（3.3，幂等 204），失败回退直连 rdb
+// —— 与 pushGilded / pushRound 同一套「先接口、失败回退」降级口径（Day 24 确立）
 const pushFavoriteRemove = (hexagramId) =>
-  pushSilent((c) => c.db.from('favorites').delete().eq('uid', c.uid).eq('hexagram_id', hexagramId))
+  pushSilent(async (c) => {
+    try {
+      await apiCall('favorites/' + hexagramId, { method: 'DELETE' })
+      return { data: null, error: null }
+    } catch (e) {
+      // 回退：直接按「当前用户 + 指定卦序号」删（RLS 保证只删自己）
+      return c.db.from('favorites').delete().eq('uid', c.uid).eq('hexagram_id', hexagramId)
+    }
+  })
 
 /**
  * 镀金上推（Day 24）：先 PUT 接口（契约 5.2，**并集**语义），失败才回退直连 upsert。
