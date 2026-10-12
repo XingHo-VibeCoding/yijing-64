@@ -1788,8 +1788,16 @@ body {
 /* 三问期间锁住底页滚动 —— 否则右侧露出滚动条，画面不干净（浮层是 fixed，但 body 仍可滚） */
 body:has(.qi-stage) { overflow: hidden; }
 
-/* 显影期保护：题面未显、选项未洇出时**不可点**（否则能点到看不见的按钮） */
-.qi-stage.is-entering .tq-opts { pointer-events: none; }
+/* ── 不可交互的时间窗（Day 23 修「有概率不进入下一个问题」）──
+ * 问题不在「有没有按钮」，而在**看不见的时候还能点**：
+ *   · 显影期（题面未显、选项未洇出）
+ *   · 白云盖住（换题中）· 黑云衔接段 · 淡出退场
+ * 这些窗口里点到透明元素会重开 sweep、把 finalRef 改回 false → 动画卡死不开始。
+ * JS 侧 pick() 已有守卫，这里是第二道防线（键盘 / 脚本也能触发）。 */
+.qi-stage.is-entering .tq-opts,
+.qi-stage.is-inked .tq-opts,
+.qi-stage.is-handoff .qi-dom,
+.qi-stage.is-final .qi-dom { pointer-events: none; }
 
 /* 选项：无底框——直接在雾面上以文字呈现（用户指正），hover 时墨色沉下去 */
 .tq-opt {

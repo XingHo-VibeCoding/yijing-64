@@ -99,8 +99,23 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
   const modeRef = useRef(initPhase === 'sweep' ? 'sweep' : initPhase === 'ask' ? 'idle' : 'veil')
   const sweepStartRef = useRef(0)
   const handoffStartRef = useRef(0)
+  /* covered 必须能被 beginSweep 重置：原来它是 effect 内的局部变量、只在「换题」分支
+   * 复位 —— 于是 sweep 期间**第二次**作答（双击 / 误触）会重开一轮 sweep，
+   * 但 covered 仍为 true → 不再 setStep → **点了答案却不换题**（用户报的卡住之一） */
+  const coveredRef = useRef(false)
 
   const pick = (qKey, optId) => {
+    /* ⚠️⚠️ 作答守卫（Day 23 修「有概率不进入下一个问题」）：
+     * 只有当前**真的停在题目相位**才接受作答。
+     * 为什么必须有 —— `.qi-dom` 在白云/黑云盖住时只是 opacity: 0，**并没有禁用交互**，
+     * 于是：
+     *   ① handoff 期间点到透明区域 → beginSweep(false) 把 finalRef 改回 false
+     *      → 第三题答完不再进衔接段，浮层永不卸载 → **动画卡死不开始**；
+     *   ② sweep 期间双击 → 重开一轮 sweep 且 covered 仍为 true → 不 setStep
+     *      → **点了答案却不换题**。
+     * 这两条都在「用户看不见但点得到」的时间窗里发生，所以表现为**有概率**。 */
+    if (modeRef.current !== 'idle') return
+    if (answersRef.current[qKey]) return // 同一题不重复作答
     const next = { ...answersRef.current, [qKey]: optId }
     answersRef.current = next
     setAnswers(next)
@@ -111,6 +126,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
   const beginSweep = (final) => {
     finalRef.current = final
     modeRef.current = 'sweep'
+    coveredRef.current = false // 每轮 sweep 重新判定「遮满」，否则二次 sweep 不推进 step
     sweepStartRef.current = performance.now()
     setPhase('sweep')
     setInked(true)
@@ -223,7 +239,6 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
 
     const t0 = performance.now()
     let veilDone = false
-    let covered = false
     let exited = false
     let castStarted = false
     let cleared = false
@@ -384,8 +399,8 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
           ctx.fillStyle = `rgba(${PAPER}, ${veilA})`
           ctx.fillRect(0, -easeInOutCubic(outP) * H * 0.22, W, H)
         }
-        if (!covered && sp >= T_COVER && FREEZE == null) {
-          covered = true
+        if (!coveredRef.current && sp >= T_COVER && FREEZE == null) {
+          coveredRef.current = true
           setInked(true)
           if (!finalRef.current) {
             setStep((s) => Math.min(s + 1, QUESTIONS.length - 1))
@@ -401,7 +416,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
             setPhase('handoff')
             setHandoff(true)
           } else {
-            covered = false
+            coveredRef.current = false
             modeRef.current = 'idle'
             setPhase('ask')
             setInked(false)
