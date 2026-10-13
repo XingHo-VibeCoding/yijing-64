@@ -1002,12 +1002,17 @@ export function clearAll() {
   } catch {
     /* 静默 */
   }
-  // 云端同步清（静默；失败则残留数据会在下次拉取时回流 —— 可再清一次）
-  pushSilent(async (c) => {
-    for (const table of ['divination_records', 'favorites', 'study_rounds', 'study_progress']) {
-      await withTimeout(c.db.from(table).delete().eq('uid', c.uid))
-    }
-  })
+  // 云端同步清：先走契约 6.2 DELETE 接口（scope=all 覆盖 records/favorites/quiz，镀金不清），
+  // 失败回退直连 rdb（与 pushFavoriteRemove 同一套降级口径；静默，残留会在下次拉取时回流可再清）
+  pushSilent((c) =>
+    apiCall('me/data', { method: 'DELETE', query: { scope: 'all' } }).catch(() =>
+      (async () => {
+        for (const table of ['divination_records', 'favorites', 'study_rounds', 'study_progress']) {
+          await withTimeout(c.db.from(table).delete().eq('uid', c.uid))
+        }
+      })()
+    )
+  )
 }
 
 /** 首页入口上的计数 */
