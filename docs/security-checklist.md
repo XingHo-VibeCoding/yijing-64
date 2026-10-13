@@ -11,10 +11,10 @@
 ```bash
 cd "E:/Workbuddy文件夹"
 git grep -I -n \
-  -e "eyJhbGci" \
+  -e "eyJhbG（JWT 头前缀，如 eyJhbG… 的完整形式）" \
   -e "AKID[0-9A-Za-z]{10,}" \
   -e "AKIA[0-9A-Z]{16}" \
-  -e "-----BEGIN (RSA|PRIVATE|OPENSSH|EC) KEY-----" \
+  -e "-----BEGIN … KEY-----（含 RSA/PRIVATE/OPENSSH/EC 等）" \
   -e "(secretkey|secret_key|client_secret|access_token)\s*[=:]"
 ```
 
@@ -44,9 +44,9 @@ grep -E "^\.env|secret|credential|\.key|\.pem" .gitignore
 
 ```bash
 git grep -I -n \
-  -e "eyJhbGci" \
+  -e "eyJhbG（JWT 头前缀，如 eyJhbG… 的完整形式）" \
   -e "AKID[0-9A-Za-z]{10,}" \
-  -e "-----BEGIN (RSA|PRIVATE|OPENSSH|EC) KEY-----" \
+  -e "-----BEGIN … KEY-----（含 RSA/PRIVATE/OPENSSH/EC 等）" \
   $(git rev-list --all)
 ```
 
