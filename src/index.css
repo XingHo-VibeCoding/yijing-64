@@ -197,7 +197,7 @@ body {
 }
 .yao-xiang { margin-top: 6px; font-size: 16px; color: #574f47; }
 
-/* ---------- 吉凶平 ---------- */
+/* ---------- 吉凶平（解读：视觉权重最高，优先抓住注意力） ---------- */
 .fortune {
   display: inline-block; margin-left: 8px; padding: 0 9px;
   font-size: 12px; border-radius: 999px; border: 1px solid currentColor;
@@ -205,12 +205,23 @@ body {
 .fortune-吉, .fortune-text-吉 { color: #9a3324; }
 .fortune-凶, .fortune-text-凶 { color: #3b3530; }
 .fortune-平, .fortune-text-平 { color: #7a7268; }
-.fortune-line { margin: 0; font-size: 15px; line-height: 1.9; }
+/* 解读正文：放大字号、加深字色，让解读先于原文被读到 */
+.fortune-line { margin: 0; font-size: 21px; line-height: 1.8; color: #241f1b; font-weight: 500; }
+.fortune-line .fortune-text { font-size: 1.35em; font-weight: 700; letter-spacing: .04em; }
+/* 解读落点卡片：暖色底 + 左侧朱色强调边，成为视觉锚点（浅底深墨字，无渐变） */
 .fortune-note {
-  margin: 12px 0 0; padding: 12px 16px; font-size: 13.5px; line-height: 1.85;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  color: #4a4440;
+  margin: 16px 0 0; padding: 16px 20px; font-size: 17px; line-height: 1.95;
+  background: #fdf6ee; border: 1px solid #e7cfa8; border-left: 4px solid #9a3324; border-radius: 10px;
+  color: #3a342f;
 }
+/* 解读块整体作为视觉锚点 */
+.block-interpret {
+  background: #fdf8f1; border: 1px solid #ecd9bf; border-radius: 14px;
+  padding: 22px 22px 20px;
+}
+.block-interpret .block-title { color: #8c2f21; }
+/* 知识点块退居参考，弱化处理 */
+.block-reference .block-title { color: #8c959f; }
 
 /* ---------- 总表：从起卦结果页定位过来的那一卦 ---------- */
 .item.is-hit {

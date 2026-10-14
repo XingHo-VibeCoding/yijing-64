@@ -443,26 +443,24 @@ export default function App() {
           </div>
         </header>
 
-        {/* 卦象 */}
-        <section className="block">
-          <h2 className="block-title">卦象</h2>
-          <div className="figure-wrap">
-            <HexagramFigure lines={current.lines} />
-            <dl className="trigrams">
-              <div>
-                <dt>上卦</dt>
-                <dd>{current.upperTrigram}（{current.upperNature}）</dd>
-              </div>
-              <div>
-                <dt>下卦</dt>
-                <dd>{current.lowerTrigram}（{current.lowerNature}）</dd>
-              </div>
-            </dl>
-          </div>
-          <SourceTag kind="text" note="卦序与卦符依据通行本（王弼本）；卦符取自 Unicode U+4DC0–U+4DFF" />
+        {/* 解读：本项目的判定，优先呈现（去掉「不作未来断言」类提示，仅保留分层标注） */}
+        <section className="block block-interpret">
+          <h2 className="block-title">解读 · 吉凶平</h2>
+          <p className="fortune-line">
+            本卦判为 <b className={`fortune-text fortune-text-${fortune}`}>{fortune}</b>
+            {basis.length ? <>，依据是卦辞里的「{basis.join('」「')}」。</> : '。'}
+          </p>
+          <p className="fortune-note">
+            {fortune === '吉'
+              ? '吉卦提醒的是戒骄躁——顺境最容易松懈，这句吉不是许诺，是提醒。'
+              : fortune === '凶'
+                ? '凶卦讲的是处境，不是判决。运随时变，成事在人。'
+                : '谈不上吉也谈不上凶，它只是把这件事实话实说。'}
+          </p>
+          <SourceTag kind="ours" />
         </section>
 
-        {/* 卦辞 / 象辞 */}
+        {/* 卦辞 / 象辞（易经原文） */}
         <section className="block">
           <h2 className="block-title">卦辞 · 象辞</h2>
           <div className="classic-block">
@@ -476,7 +474,7 @@ export default function App() {
           <SourceTag kind="text" note="取自通行本（王弼本），已逐条核对，一字未改" />
         </section>
 
-        {/* 六爻爻辞 */}
+        {/* 六爻爻辞（易经原文） */}
         <section className="block">
           <h2 className="block-title">六爻爻辞</h2>
           <ol className="yao-list">
@@ -496,21 +494,23 @@ export default function App() {
           />
         </section>
 
-        {/* 吉凶平：本项目的判定，依据可追溯 */}
-        <section className="block">
-          <h2 className="block-title">吉 · 凶 · 平</h2>
-          <p className="fortune-line">
-            本卦判为 <b className={`fortune-text fortune-text-${fortune}`}>{fortune}</b>
-            {basis.length ? <>，依据是卦辞里的「{basis.join('」「')}」。</> : '。'}
-          </p>
-          <p className="fortune-note">
-            {fortune === '吉'
-              ? '吉卦提醒的是戒骄躁——顺境最容易松懈，这句吉不是许诺，是提醒。'
-              : fortune === '凶'
-                ? '凶卦讲的是处境，不是判决。运随时变，成事在人。'
-                : '谈不上吉也谈不上凶，它只是把这件事实话实说。'}
-          </p>
-          <SourceTag kind="ours" note="这是本项目按卦辞整体处境作出的判定，不作未来断言" />
+        {/* 卦象（知识点，作为参考放在最后） */}
+        <section className="block block-reference">
+          <h2 className="block-title">卦象 · 知识点</h2>
+          <div className="figure-wrap">
+            <HexagramFigure lines={current.lines} />
+            <dl className="trigrams">
+              <div>
+                <dt>上卦</dt>
+                <dd>{current.upperTrigram}（{current.upperNature}）</dd>
+              </div>
+              <div>
+                <dt>下卦</dt>
+                <dd>{current.lowerTrigram}（{current.lowerNature}）</dd>
+              </div>
+            </dl>
+          </div>
+          <SourceTag kind="text" note="卦序与卦符依据通行本（王弼本）；卦符取自 Unicode U+4DC0–U+4DFF" />
         </section>
       </main>
     )

@@ -176,7 +176,7 @@ export default function CastResult({
                 下卦为{result.lowerTrigram}，取象「{result.lowerNature}」。
                 两卦相叠，画面就是「<b>{structurePhrase(result.upperNature, result.lowerNature)}</b>」。
               </p>
-              <SourceTag kind="ours" note="本层由上下卦的取象推出，只描述画面，不作吉凶判断" />
+              <SourceTag kind="ours" />
             </section>
 
             {/* 第二层 · 卦辞爻辞怎么讲 */}
@@ -222,10 +222,7 @@ export default function CastResult({
                   此卦一句
                 </h2>
                 <p className="cr-verdict">{shortVerdict}</p>
-                <SourceTag
-                  kind="ours"
-                  note="本项目的理解，不是《周易》里的话"
-                />
+                <SourceTag kind="ours" />
               </section>
             ) : null}
 
@@ -259,10 +256,7 @@ export default function CastResult({
                   这一卦判为「{fortune}」，依据是卦辞里的「{result.fortuneBasis.join('」「')}」。
                 </p>
               ) : null}
-              <SourceTag
-                kind="ours"
-                note="处境由卦象推出，共鸣句取「先扬后抑」的通用句法 —— 都是本项目的理解，不是《周易》里的话"
-              />
+              <SourceTag kind="ours" />
             </section>
 
             {/* ── 去读全卦：把好奇导向学习（把点击坐标带给转场，涟漪从按钮上冒出来） ── */}
