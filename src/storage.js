@@ -618,10 +618,22 @@ export function resetOrphanNotice() {
   orphanCheck = { ...orphanCheck, done: false }
 }
 
+/* ⚠️ Day 24 修竞态（数据丢失）：清空的云端删除是 4 表串行 DELETE，在飞可达数百毫秒到数秒。
+   这期间任何新写入（收藏 / 记录 / 成绩 / 进度）若直接发出，会被随后落地的 DELETE 抹掉 ——
+   界面显示「已新建 / 已保存」，几秒后数据却没了（假成功 + 静默丢失）。
+   实测复现：clearAll() 后立刻 POST /api/favorites → 201，4.5s 后云端该行已不存在。
+   做法：clearAll 把在飞的清空 Promise 记下来；所有写入路径先等它落地再发。
+   方向只有这一侧：清空**不**等写入（用户最后动作是清空时，清干净才对）。 */
+let clearInFlight = null
+const afterClearDone = () => clearInFlight || Promise.resolve()
+
 /* 写入后静默上推（§11 E2：失败不告知，本地已成功；最后错误存 cloud.lastError 供诊断） */
 function pushSilent(fn) {
   cloudReady()
-    .then((c) => withTimeout(fn(c)))
+    .then(async (c) => {
+      await afterClearDone() // 等在飞的清空落地，别让新写入被抹掉（Day 24）
+      return withTimeout(fn(c))
+    })
     .catch((e) => {
       cloud.lastError = String((e && e.message) || e)
     })
@@ -844,6 +856,8 @@ export async function debugApiWrite(name, body) {
   if (!c) throw new Error('云端未就绪')
   const { accessToken } = await withTimeout(c.auth.getAccessToken())
   if (!accessToken) throw new Error('取不到访问凭证')
+  // 检查台的写入测试与业务写入同权：别把新行埋在在飞的清空后面（Day 24 修竞态）
+  await afterClearDone()
   const res = await withTimeout(
     fetch(`${API_BASE}/api/${name}`, {
       method: 'POST',
@@ -1004,15 +1018,24 @@ export function clearAll() {
   }
   // 云端同步清：先走契约 6.2 DELETE 接口（scope=all 覆盖 records/favorites/quiz，镀金不清），
   // 失败回退直连 rdb（与 pushFavoriteRemove 同一套降级口径；静默，残留会在下次拉取时回流可再清）
-  pushSilent((c) =>
-    apiCall('me/data', { method: 'DELETE', query: { scope: 'all' } }).catch(() =>
-      (async () => {
-        for (const table of ['divination_records', 'favorites', 'study_rounds', 'study_progress']) {
-          await withTimeout(c.db.from(table).delete().eq('uid', c.uid))
-        }
-      })()
+  // ⚠️ Day 24：**不**再走 pushSilent —— 那会先在 clearInFlight 上自等待而成死锁。
+  //    改为直接把在飞的清空 Promise 记下来，供其余写入路径等待（见 pushSilent 处注释）。
+  clearInFlight = cloudReady()
+    .then((c) =>
+      withTimeout(
+        apiCall('me/data', { method: 'DELETE', query: { scope: 'all' } }).catch(() =>
+          (async () => {
+            for (const table of ['divination_records', 'favorites', 'study_rounds', 'study_progress']) {
+              await withTimeout(c.db.from(table).delete().eq('uid', c.uid))
+            }
+          })()
+        )
+      )
     )
-  )
+    .catch((e) => {
+      // 清空失败不阻塞后续写入（本地已清；残留下次拉取回流可再清），只留诊断
+      cloud.lastError = String((e && e.message) || e)
+    })
 }
 
 /** 首页入口上的计数 */
