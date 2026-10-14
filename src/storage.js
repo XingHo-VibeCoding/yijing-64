@@ -1101,6 +1101,16 @@ export function importBackupCode(code) {
     throw new Error('进度码无法解析，多半是复制时缺了一段——请重新完整复制一次')
   }
   if (!payload || payload.v !== 1) throw new Error('这个进度码的版本不认识')
+  // ⚠️ 形状校验（Day 24 余力加练修）：四段都必须是数组。畸形码（如 f 段是字符串/数字）会让
+  //    normIds 对非数组调 .filter，抛英文 TypeError「(arr || []).filter is not a function」——
+  //    而 Records.jsx 直接展示 e.message，用户看到的就是这句裸报错（本函数其他分支都守约抛中文）。
+  for (const k of ['r', 'f', 'g', 'q']) {
+    if (payload[k] != null && !Array.isArray(payload[k])) {
+      throw new Error('进度码内容不完整或已损坏——请重新完整复制一次')
+    }
+  }
+  // 日期守卫：只接受 YYYY-MM-DD（todayKey 的格式）—— 挡住垃圾行写进本地
+  const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''))
 
   // 起卦记录：按日期补缺（一天一条，本地已有则保留本地）
   const recs = loadRecords()
@@ -1108,7 +1118,7 @@ export function importBackupCode(code) {
   let addR = 0
   for (const row of payload.r || []) {
     const [date, hid, lines] = row || []
-    if (!date || !Number.isInteger(hid) || hid < 1 || hid > 64 || byDate.has(date)) continue
+    if (!isDate(date) || !Number.isInteger(hid) || hid < 1 || hid > 64 || byDate.has(date)) continue
     byDate.set(date, {
       date,
       hexagramId: hid,
@@ -1145,14 +1155,16 @@ export function importBackupCode(code) {
   let addQ = 0
   for (const row of payload.q || []) {
     const [date, score, total, a, w] = row || []
-    if (!date) continue
-    const key = `${date}|${score}|${total}`
+    const sc = Number(score)
+    const tt = Number(total)
+    if (!isDate(date) || !Number.isFinite(sc) || !Number.isFinite(tt)) continue
+    const key = `${date}|${sc}|${tt}`
     if (seen.has(key)) continue
     seen.add(key)
     rounds.push({
       date,
-      score: score || 0,
-      total: total || 0,
+      score: sc,
+      total: tt,
       answeredIds: normIds(String(a || '').split('.').map(Number)),
       wrongIds: normIds(String(w || '').split('.').map(Number)),
     })
