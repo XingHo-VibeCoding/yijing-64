@@ -202,10 +202,25 @@ export default function Records({ records, favorites, quizRounds = 0, onOpen, on
               空态那句提示自带同一规则，所以只在有记录时显示，避免同一屏说两遍。 */}
           {records.length > 0 && <p className="rec-note">只收录每日第一次起卦</p>}
           {records.length === 0 ? (
-            <p className="rec-empty">
-              还没有记录。<b>每天第一次起卦会自动记在这里</b>，一天只记一条——
-              想多起几次随时可以，只是后面的不入记录。
-            </p>
+            <>
+              <p className="rec-empty">
+                还没有记录。<b>每天第一次起卦会自动记在这里</b>，一天只记一条——
+                想多起几次随时可以，只是后面的不入记录。
+              </p>
+              {/* Day 27 外行试用修复：空态原本只有一句陈述，读者看完不知道该做什么
+                  （试用第 3 步「让它自己记下来」在这里成了死胡同）。补一句行动指引并给
+                  一个直达总表的按钮，指向唯一的记录入口「起 一 卦」。纯指引，不新增功能。 */}
+              <p className="rec-empty-hint">
+                现在就记第一条：回总表点「<b>起 一 卦</b>」，今天起的第一卦会自动出现在这里。
+              </p>
+              <button
+                type="button"
+                className="rec-btn rec-empty-cta"
+                onClick={onBack}
+              >
+                回总表起一卦
+              </button>
+            </>
           ) : (
             <ul className="rec-ul">
               {records.map((r) => {

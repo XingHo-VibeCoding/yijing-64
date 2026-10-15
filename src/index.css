@@ -366,6 +366,14 @@ body {
 }
 .rec-empty b { color: var(--ink); }
 
+/* Day 27 外行试用：空态的行动指引 + 直达按钮（试用第 3 步的死胡同） */
+.rec-empty-hint {
+  margin: 10px 0 0; padding: 12px 16px; font-size: 13.5px; line-height: 1.8; color: var(--ink-soft);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+}
+.rec-empty-hint b { color: var(--ink); }
+.rec-empty-cta { margin-top: 12px; }
+
 .rec-danger { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
 .rec-btn {
   padding: 9px 18px; font: inherit; font-size: 13.5px; cursor: pointer;
