@@ -7,7 +7,11 @@
 # --- 第一优先级：本机私密内容，绝对不能公开 ---
 
 # 会话记忆 / 工作日志目录（内含本机路径、仓库信息等）
-.workbuddy/
+# ⚠️ Day 25：改为 .workbuddy/* + 否定规则 —— 只有 skills/（发布前检查 Skill）入库，
+#    其余调试产物（截图、脚本、dist-verify、探针页）仍全部忽略
+.workbuddy/*
+!.workbuddy/skills/
+!.workbuddy/skills/**
 
 # 上一个练习的独立 Git 仓库，不属于本项目
 Claw/

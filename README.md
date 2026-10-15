@@ -14,6 +14,9 @@
 .
 ├─ README.md             # 项目说明（本文件）
 ├─ .gitignore            # 忽略规则，保护本地敏感文件不上传
+├─ .workbuddy/
+│  └─ skills/
+│     └─ verify-project/ # 发布前检查 Skill（SKILL.md + scripts/verify.py；.workbuddy 里唯一入库的部分）
 ├─ index.html            # 前端入口
 ├─ package.json          # 依赖与脚本
 ├─ vite.config.js
@@ -107,6 +110,18 @@ npm run preview      # 预览构建结果
 > 同理 `npm run build` **第二次会失败**（要清 `dist/`），验证构建改用：
 > `npx vite build --outDir .workbuddy/dist-checkN --emptyOutDir`。
 
+## 发布前检查（verify-project Skill）
+
+把历史踩坑固化成 24 项逐项 PASS/FAIL 检查，**发布前跑一遍**：
+
+```bash
+python .workbuddy/skills/verify-project/scripts/verify.py
+```
+
+- 退出码：有 FAIL → 1，否则 0（可直接串进发布流程）。
+- 覆盖八组：**A 密钥**（当前树 + 全历史扫描、.env 不入库、.env.example 仅占位）｜**B 环境变量**（VITE_ 占位齐全、无硬编码回退）｜**C 错误处理**（三类中文提示、无裸报错）｜**D 云端与 RLS**（无 upsert、return=minimal、删除不带 uid、timestamptz 完整 ISO、Asia/Shanghai）｜**E 前端规则**（禁词、无 plain、繁体仅仪式、.qi-stage 层级）｜**F 文档**（doc-check、无内嵌 mermaid、mmd/png 成对）｜**G 构建**（vite build）｜**H 公网**（托管 200、健康接口 ok:true）。
+- Skill 的完整检查项表、通过标准、检查器边界与校准记录见 `.workbuddy/skills/verify-project/SKILL.md`。
+
 ## 产品定位与边界（对齐 PRD v1.4）
 
 ### 主打功能
@@ -190,6 +205,7 @@ npm run preview      # 预览构建结果
 | Day 17 追加 | **前端接入读接口 + 修一处越权读取**：记录与收藏优先走云函数（接口不可用时静默回退直连）；记录页新增「云端读取」面板；函数补 CORS 预检；demo 读策略收紧为仅 Publishable Key 可读（迁移 `20261004230153`）—— 契约 v1.6 / TECH_DESIGN v2.65 | 已完成 |
 | Day 18 | **`POST /api/favorites`（契约 3.2）写入接口实现并上线**：防重复按契约幂等口径（已存在返回 200 且不写库，主键兜底）、四步校验逐条给中文原因、`created_at` 按 Asia/Shanghai 写入、加服务日志（不记 token）—— 契约 v1.7 / TECH_DESIGN v2.66 | 已完成 |
 | Day 19 | **排查并修掉「二次打开记录概率性清零」**：根因是匿名 uid 变了导致云端备份断链（不是记录被清零）；记录页新增断链提示 + 用户确认后重绑；顺带修掉判定挂错分支、面板只读一次、重绑无条件报成功三处问题 —— TECH_DESIGN v2.67 | 已完成 |
+| Day 25 | **发布前检查 Skill `verify-project`**（`.workbuddy/skills/`，24 项 PASS/FAIL，两轮实跑校准 4 处误报 + 故意弄坏验证不虚报；首轮还当场抓出 v2.95 的裸竖线真问题） | 已完成 |
 | 后续 | 按卦序逐卦补充个人解读 | 待开始 |
 
 > **关于本表的「Day」编号（Day 13 补记）**：Day 9–12 的工作在时间上是连续的（常跨零点 —— 例如编号为
@@ -214,5 +230,5 @@ npm run preview      # 预览构建结果
 ## 说明
 
 - 本项目为个人学习整理，卦序采用**通行本（王弼本）**：上经三十卦（1–30）、下经三十四卦（31–64）。
-- `.workbuddy/`、`Claw/`、`.env` 等本机私密内容已在 `.gitignore` 中排除，不会上传。
+- `.workbuddy/` 里的调试产物（截图 / 脚本 / 日志）与 `Claw/`、`.env` 等本机私密内容已在 `.gitignore` 中排除，不会上传；**唯一例外是 `.workbuddy/skills/`**（发布前检查 Skill，见上一节，经否定规则显式入库）。
 - 提交规范：`Day N｜一句话`，正文两行写「改了什么 / 加了什么」。
