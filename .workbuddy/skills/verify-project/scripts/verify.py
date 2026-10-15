@@ -102,6 +102,9 @@ KEY_PATTERNS = [
 KEY_RE = '|'.join(KEY_PATTERNS)
 
 # A1 当前树（已跟踪文件）无密钥特征值
+SELF_DIR = '.workbuddy/skills/verify-project/'  # 检查器自身：模式定义必然含特征词字面量，排除（否则自查匹配自己）
+
+
 def is_cmd_example(line):
     """git grep 输出 '<rev>:<path>:<ln>:<content>'；content 以 -e 开头的是
     docs/security-checklist.md 里的扫描命令示例（文档教人怎么搜，必然含特征词字面量，
@@ -111,18 +114,27 @@ def is_cmd_example(line):
     return bool(re.match(r'\s*-e\s', content))
 
 
+def is_self_dir(line):
+    """检查器自身的源码/文档：KEY_PATTERNS 的定义处，必然含特征词字面量。"""
+    return SELF_DIR in line
+
+
 rc, out = git(['grep', '-nE', KEY_RE, 'HEAD'])
-tree_hits = [l for l in out.split('\n') if l.strip() and not l.startswith('fatal') and not is_cmd_example(l)]
+tree_hits = [l for l in out.split('\n') if l.strip() and not l.startswith('fatal')
+             and not is_cmd_example(l) and not is_self_dir(l)]
 report('A1', '当前树无密钥特征值', len(tree_hits) == 0,
-       "git grep -nE '<密钥特征集>' HEAD → %d 命中%s" % (len(tree_hits), '；' + '；'.join(tree_hits[:3]) if tree_hits else ''))
+       "git grep -nE '<密钥特征集>' HEAD → %d 命中%s（已排除检查器自身目录与自查文档的命令示例行）"
+       % (len(tree_hits), '；' + '；'.join(tree_hits[:3]) if tree_hits else ''))
 
 # A2 全 Git 历史 blob 无密钥特征值
 rc, revs_raw = git(['rev-list', '--all'])
 revs = revs_raw.split()
 rc2, out2 = git(['grep', '-nE', KEY_RE] + revs)
-hist_hits = [l for l in out2.split('\n') if l.strip() and not l.startswith('fatal') and not is_cmd_example(l)]
+hist_hits = [l for l in out2.split('\n') if l.strip() and not l.startswith('fatal')
+             and not is_cmd_example(l) and not is_self_dir(l)]
 report('A2', '全 Git 历史（%d 个提交）无密钥特征值' % len(revs), len(hist_hits) == 0,
-       "git grep -nE '<密钥特征集>' $(git rev-list --all) → %d 命中%s" % (len(hist_hits), '；' + '；'.join(hist_hits[:3]) if hist_hits else ''))
+       "git grep -nE '<特征集>' $(git rev-list --all) → %d 命中%s（已排除检查器自身目录与自查文档的命令示例行）"
+       % (len(hist_hits), '；' + '；'.join(hist_hits[:3]) if hist_hits else ''))
 
 # A3 .env 不被跟踪且被忽略；.env.example 被跟踪
 rc, tracked = git(['ls-files'])
