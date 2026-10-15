@@ -155,6 +155,8 @@ python .workbuddy/skills/verify-project/scripts/verify.py
 - **演练记录**：[`docs/rollback-drill-record.md`](docs/rollback-drill-record.md) —— Day 26 真实演练：**发布 23s / 回滚 22s / 恢复 20s**，模板可复用。
 - 一句话原理：静态托管上传是**非破坏性**的（只覆盖同名文件、不删旧文件），所以**回滚 = 重传上一版产物目录**，不需要平台撤销功能。
 - ⚠️ 数据层**没有回滚能力**（无数据库快照）：数据出问题只能写新迁移修复，前端回滚修不了数据。
+- **最终验收表**：[`docs/final-acceptance.md`](docs/final-acceptance.md) —— Day 28 结营，十项逐项 PASS / FAIL / 未执行 + 原始响应证据。
+- **演示提纲**：[`docs/demo-outline.md`](docs/demo-outline.md) —— 约 4 分半：用户问题 → 核心流程（含真实写入与刷新持久化）→ 提示词改写 → 验证方式 → 平台限制 → 后续计划，附话术红线。
 
 ## 进度
 
@@ -221,6 +223,7 @@ python .workbuddy/skills/verify-project/scripts/verify.py
 | Day 25 | **发布前检查 Skill `verify-project`**（`.workbuddy/skills/`，24 项 PASS/FAIL，两轮实跑校准 4 处误报 + 故意弄坏验证不虚报；首轮还当场抓出 v2.95 的裸竖线真问题） | 已完成 |
 | Day 26 | **正式发布 v1.0 + 真实回滚演练**：版本标记三层（tag `v1.0`→`a84d022`、版本化产物目录 + manifest、线上 JS hash 指纹）；发布清单 / 回滚手册 / 演练记录三份文档；静态托管真实演练——发布 23s、**回滚 22s**、恢复 20s，两版资源并存实证上传非破坏性；确认数据层无回滚能力 | 已完成 |
 | Day 27 | **外行试用 + 最高优先级修复 + 资源到期检查**：试用脚本与记录表（[usability-trial-script.md](docs/usability-trial-script.md)，含故意含糊措辞与修复提示词模板）；试用发现第 3 步「记录」在首屏是死胡同 → 修复记录页空态（新增行动指引 + 直达按钮，纯指引不加功能）并发布 v1.1；**CloudBase 体验版 2027-03-30 到期不自动续**（[cloudbase-resources.md](docs/cloudbase-resources.md)，当前用量约 24.2 资源点、额度充裕） | 已完成 |
+| Day 28 | **结营最终验收 + 演示提纲**：[`docs/final-acceptance.md`](docs/final-acceptance.md) 十项逐项取证（8 PASS / 0 FAIL / 1 部分通过，另有 5 项如实标未完成、未验证的不写成通过）；[`docs/demo-outline.md`](docs/demo-outline.md) 约 4 分半演示提纲（用户问题 / 核心流程 / 提示词改写 / 验证方式 / 平台限制 / 优化计划）。验收对象是**公网 v1.1**，接口用真实匿名会话逐个打，发布门 24/24 | 已完成 |
 | 后续 | 按卦序逐卦补充个人解读 | 待开始 |
 
 > **关于本表的「Day」编号（Day 13 补记）**：Day 9–12 的工作在时间上是连续的（常跨零点 —— 例如编号为
