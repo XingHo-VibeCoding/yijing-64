@@ -330,7 +330,7 @@ RLS 策略 `read demo records` / `read demo favorites` 只放行
 | --- | --- |
 | **请求参数** | body：`{ "hexagramId": 1, "changingLines": [3, 5] }` |
 | **响应 201**（首次）/ **200**（当天已有） | 见下方 |
-| **错误** | `401`、`422` `VALIDATION_FAILED`（`hexagramId` 不在 1–64、`changingLines` 含非 1–6 的整数） |
+| **错误** | `401`、`422` `VALIDATION_FAILED`（仅 `hexagramId` 不在 1–64，或 `changingLines` 不是数组） |
 
 ```json
 {
@@ -343,7 +343,14 @@ RLS 策略 `read demo records` / `read demo favorites` 只放行
 **约定**：
 - `date` **由服务端取当天**，客户端传了也忽略（防篡改、防时区漂移）
 - **幂等**：当天已有记录时返回 `200` + `created: false`，**不覆盖**原有那一卦
-- `changingLines` 去重、升序、过滤非法值后入库
+- `changingLines` 去重、升序、**过滤非法值后入库**
+
+> **订正（2026-10-17，Day 28 结营补测）**：本节原先在「错误」栏写着「`changingLines` 含非 1–6 的整数 → `422`」，
+> 与紧邻的「约定」栏「过滤非法值后入库」**互相矛盾**。以线上实测为准：
+> `POST /api/records {"date":"2026-10-17","hexagramId":5,"changingLines":[9]}` 返回 **201**，
+> 入库值为 `changingLines: []`（越界值被静默丢弃，不是报错）→ **行为跟的是「约定」，原「错误」栏表述有误，已改**。
+> 另：传非法 `date`（如 `"不是日期"`）同样返回 201，日期被替换为服务端当天 —— 这**符合**「`date` 服务端取」的约定，不是缺陷。
+> 来源：`day28-api2.cjs`（`.workbuddy/`，不入库）。⚠️ 本项目此接口**没有 PATCH**，未列入验收。
 
 ---
 
