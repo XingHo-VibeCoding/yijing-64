@@ -34,14 +34,14 @@ const MIST = '252, 249, 242' // 亮白云团（比纸色更亮一档，翻涌时
 
 /* 时间轴（ms）——veil 再加长：雾要多翻涌一会儿、且浓到盖死底页（用户二轮指正） */
 const T_VEIL = 3200
-/* ⏱ 一问的节奏（用户 2026-10-12 定：「问题间动画持续三秒」）：
- * 实测原参数从答完到选项可点要 5.3s（sweep 2.75s + 显影 2.55s）——
- * 慢得像「卡住等点击」。现压缩到 **约 3.0s**：
- *   sweep 1.30s（白云涌起 0.8 + 散开 0.5）→ 题面首字 0.26s 起逐字显影
- *   → 选项 0.9s 起依次洇出，1.7s 内全部可点。
- * 换题**全自动**：答完即涌、散开即出下一题，全程无需用户点「继续」（本来也没有继续按钮）。 */
-const T_COVER = 800 // sweep：白云遮满（换题 / 进衔接点）
-const T_SWEEP_END = 1300 // sweep：散开完毕
+/* ⏱ 一问的节奏（用户 2026-10-17 定：「间隔太长，改成间隔一秒直接到下一问」）：
+ * 上一版是 3.0s（用户 2026-10-12 定的三秒）。现压到 **约 1 秒**：
+ *   sweep 0.52s（白云遮满 0.28 + 散开 0.24）→ 题面首字 0.08s 起逐字显影（26ms/字）
+ *   → 选项 0.22s 起依次洇出（34ms 递进、0.28s 显影完），**0.8s 起可点**。
+ * 换题**全自动**：答完即涌、散开即出下一题，全程无需用户点「继续」（本来也没有继续按钮）。
+ * ⚠️ 四处时间必须一起改（JS 三处 + CSS 一处），只改一处会出现「云散了但选项还没洇出」的空档。 */
+const T_COVER = 280 // sweep：白云遮满（换题 / 进衔接点）
+const T_SWEEP_END = 520 // sweep：散开完毕
 /* handoff：三问→起卦动画的黑云衔接（用户指正「衔接太生硬」）
  * 参数照 CastingAnimation 的 inkIn 800 / hold 1000 / inkOut 800 等比放大，
  * 保证「墨涌上来 → 保持 → 墨散去」的节奏与起卦动画内部转场同源 */
@@ -72,12 +72,14 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
   const [handoff, setHandoff] = useState(false) // 黑云衔接段（白雾 → 墨 → 露动画）
   /* ⚠️ 选项是**淡入动画**（opacity 0 → 1），动画没跑完时元素已经能点 ——
    * 用户可以点到「还看不见的按钮」（本机 CDP 验证时测到 options 从 DOM 里就在）。
-   * 故进入题目后的 1s 内锁住选项（此时选项尚未开始洇出，题面正在显影）。 */
+   * 故进入题目后的 280ms 内锁住选项（此时选项尚未开始洇出，题面正在显影）。
+   * ⚠️ 这个锁必须**短于**选项显影完成时刻（现为 220+34×3+280 ≈ 600ms），否则会出现
+   * 「云散了、锁也解了、但选项还是半透明的空档」——用户会以为点不动。 */
   const [entering, setEntering] = useState(false)
   useEffect(() => {
     if (phase !== 'ask') return undefined
     setEntering(true)
-    const t = setTimeout(() => setEntering(false), 1000)
+    const t = setTimeout(() => setEntering(false), 280)
     return () => clearTimeout(t)
   }, [phase, step])
   const finalRef = useRef(initFinal)
@@ -278,6 +280,14 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
 
     const loop = (now) => {
       const el = FREEZE != null ? FREEZE : now - t0
+      /* ⚠️⚠️ 时钟量纲（2026-10-17 修，实测「问与问之间隔 5 秒」的真正病根）：
+       * `el` 是**相对挂载**的时间（now - t0），而 `sweepStartRef.current` 记的是
+       * `performance.now()`（**绝对**时间）。两者相减得到一个巨大的负数，
+       * 于是 `sp >= T_COVER` 要等到「页面运行时长 ≈ 挂载时刻绝对值」之后才成立 ——
+       * 表现为：把 T_COVER 从 800 调到 280 **完全没效果**，换题仍要等约 5 秒。
+       * handoff 段（`hp = performance.now() - handoffStartRef.current`）本来就是绝对时间，没这个问题。
+       * 修法：换题计时统一走绝对时钟；FREEZE 定格时把相对值换算回绝对（t0 + FREEZE）。 */
+      const nowAbs = FREEZE != null ? t0 + FREEZE : now
       const mode = modeRef.current
 
       ctx.clearRect(0, 0, W, H)
@@ -365,7 +375,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
 
       /* ---------- sweep：黑云翻涌（涌上遮满 → 遮满后原地缓滚 → 散开） ---------- */
       if (mode === 'sweep') {
-        const sp = el - sweepStartRef.current
+        const sp = nowAbs - sweepStartRef.current // ⚠️ 必须与 sweepStartRef 同量纲（绝对），见上方注释
         const outP = clamp01((sp - T_COVER) / (T_SWEEP_END - T_COVER))
         const live = 1 - easeInOutCubic(outP)
         const surgeP = clamp01(sp / (T_COVER * 0.85))
@@ -379,7 +389,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
           const x = px(c.bx) + Math.sin(sp / 700 + c.ph) * c.sway
           const env = sp < T_COVER ? clamp01(prog / (c.r * 1.2)) : 1
           const a = c.a * env * (0.4 + 0.6 * surgeP) * live * 0.22
-          drawCloud(x, y, c.r * (0.9 + 0.25 * surgeP), a, sp, c, INK)
+          drawCloud(x, y, c.r * (0.9 + 0.25 * surgeP), a, el, c, INK) // ⚠️ 传 el（连续时钟）而非 sp
         }
         /* 白云主体压上 */
         for (const c of surge) {
@@ -391,10 +401,10 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
           const x = px(c.bx) + Math.sin(sp / 700 + c.ph) * c.sway
           const env = sp < T_COVER ? clamp01(prog / (c.r * 1.2)) : 1
           const a = c.a * env * (0.4 + 0.6 * surgeP) * live
-          drawCloud(x, y, c.r * (0.9 + 0.25 * surgeP), a, sp, c, MIST)
+          drawCloud(x, y, c.r * (0.9 + 0.25 * surgeP), a, el, c, MIST) // ⚠️ 同上
         }
         /* 兜底雾面：涌起后半段补实（保证换题藏在云下）；散开段整体变淡上飘 */
-        const veilA = 0.97 * easeInOutCubic(clamp01((sp - 350) / (T_COVER - 350))) * live
+        const veilA = 0.97 * easeInOutCubic(clamp01(sp / (T_COVER * 0.9))) * live // 遮满在 T_COVER 达峰（原式写死 350）
         if (veilA > 0.01) {
           ctx.fillStyle = `rgba(${PAPER}, ${veilA})`
           ctx.fillRect(0, -easeInOutCubic(outP) * H * 0.22, W, H)
@@ -523,7 +533,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
             <p className="tq-step-no">{Q.title}</p>
             <h3 className="tq-ask qi-ink-chars">
               {[...Q.ask].map((ch, i) => (
-                <span key={i} className="tq-char" style={{ animationDelay: 260 + i * 62 + 'ms' }}>
+                <span key={i} className="tq-char" style={{ animationDelay: 80 + i * 26 + 'ms' }}>
                   {ch}
                 </span>
               ))}
@@ -535,7 +545,7 @@ export default function QuestionInkFlow({ onAllAnswered, onExit }) {
                   <button
                     type="button"
                     className="tq-opt qi-appear"
-                    style={{ animationDelay: 900 + i * 110 + 'ms' }}
+                    style={{ animationDelay: 220 + i * 34 + 'ms' }}
                     onClick={() => pick(Q.key, o.id)}
                   >
                     <span className="tq-opt-key" aria-hidden="true">{i + 1}</span>
